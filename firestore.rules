@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Paste this into Firebase Console -> Firestore Database -> Rules, then Publish.
+// Replace "teacher@example.com" with the exact email of the one teacher account
+// you create in Authentication -> Users (must match TEACHER_EMAIL in
+// assets/firebase-config.js).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /results/{resultId} {
+
+      // Students (signed in anonymously by index.html) may submit a result,
+      // but can never read results back, and can never edit or delete one
+      // once created — this stops students from seeing others' marks or
+      // altering their own after submitting.
+      allow create: if request.auth != null
+                    && request.resource.data.name is string
+                    && request.resource.data.roll is string
+                    && request.resource.data.testId is string;
+
+      // Only the signed-in teacher account can read all results, and only
+      // the teacher can update a result (used for entering short-answer
+      // marks). Nobody can delete a result from the app itself.
+      allow read, update: if request.auth != null
+                           && request.auth.token.email == "teacher@example.com";
+      allow delete: if false;
+    }
+  }
+}

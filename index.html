@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports & Exercise Science — Online Test</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Sports & Exercise Science</h1>
+  <p class="lede">Online test portal. Enter your details below to begin. Once you start, the test runs in a monitored, full-screen session — read the rules before continuing.</p>
+
+  <div class="card">
+    <label for="name">Full name</label>
+    <input type="text" id="name" placeholder="As on your class roster" autocomplete="off">
+
+    <label for="roll">Roll number / Student ID</label>
+    <input type="text" id="roll" placeholder="e.g. SES-2024-014" autocomplete="off">
+
+    <label for="className">Class</label>
+    <select id="className">
+      <option value="">Select your class</option>
+      <option>First Year</option>
+      <option>Second Year</option>
+      <option>Third Year</option>
+    </select>
+
+    <label for="testSelect">Test</label>
+    <select id="testSelect">
+      <option value="">Select your class first</option>
+    </select>
+
+    <div id="err" class="banner warn" style="display:none; margin-top:20px;"></div>
+
+    <button id="startBtn" style="margin-top:24px;" disabled>Start test</button>
+  </div>
+
+  <div class="banner">
+    <strong>Before you start:</strong> the test opens in full-screen. Switching tabs, minimizing the window, exiting full-screen, or copy/pasting is logged. After
+    <span id="maxV">3</span> such flags, your test is auto-submitted. Make sure you have a stable connection and won't be interrupted.
+  </div>
+
+  <footer class="note">Teacher access is on a separate page and is not linked here for students.</footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+
+const classNameEl = document.getElementById('className');
+const testSelect = document.getElementById('testSelect');
+const startBtn = document.getElementById('startBtn');
+const errEl = document.getElementById('err');
+let manifest = [];
+
+fetch('data/tests/manifest.json').then(r => r.json()).then(data => {
+  manifest = data;
+}).catch(() => {
+  errEl.textContent = 'Could not load the list of tests. Please tell your teacher.';
+  errEl.style.display = 'block';
+});
+
+classNameEl.addEventListener('change', () => {
+  const cls = classNameEl.value;
+  testSelect.innerHTML = '';
+  const matches = manifest.filter(t => t.className === cls);
+  if (!cls) {
+    testSelect.innerHTML = '<option value="">Select your class first</option>';
+  } else if (matches.length === 0) {
+    testSelect.innerHTML = '<option value="">No tests currently open for your class</option>';
+  } else {
+    testSelect.innerHTML = '<option value="">Select a test</option>' +
+      matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+  }
+  validate();
+});
+
+[document.getElementById('name'), document.getElementById('roll'), testSelect].forEach(el =>
+  el.addEventListener('input', validate)
+);
+testSelect.addEventListener('change', validate);
+
+function validate() {
+  const ok = document.getElementById('name').value.trim().length > 1 &&
+             document.getElementById('roll').value.trim().length > 0 &&
+             classNameEl.value && testSelect.value;
+  startBtn.disabled = !ok;
+}
+
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = 'Signing in…';
+  errEl.style.display = 'none';
+  try {
+    await firebase.auth().signInAnonymously();
+    const session = {
+      name: document.getElementById('name').value.trim(),
+      roll: document.getElementById('roll').value.trim(),
+      className: classNameEl.value,
+      testId: testSelect.value
+    };
+    sessionStorage.setItem('examSession', JSON.stringify(session));
+    window.location.href = 'test.html';
+  } catch (e) {
+    errEl.textContent = 'Could not start a secure session (' + e.message + '). Check your connection and try again.';
+    errEl.style.display = 'block';
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start test';
+  }
+});
+</script>
+</body>
+</html>

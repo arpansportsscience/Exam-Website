@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher dashboard</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="loginScreen" class="wrap">
+  <h1>Teacher login</h1>
+  <p class="lede">Sign in to view results and grade short-answer responses.</p>
+  <div class="card">
+    <label for="email">Email</label>
+    <input type="text" id="email">
+    <label for="pw">Password</label>
+    <input type="password" id="pw">
+    <div id="loginErr" class="banner warn" style="display:none; margin-top:16px;"></div>
+    <button id="loginBtn" style="margin-top:20px;">Sign in</button>
+  </div>
+</div>
+
+<div id="dashScreen" class="wrap wide" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>Results dashboard</h1>
+    <button class="secondary" id="signOutBtn">Sign out</button>
+  </div>
+
+  <div class="card">
+    <label for="classFilter">Class</label>
+    <select id="classFilter">
+      <option value="">All classes</option>
+      <option>First Year</option>
+      <option>Second Year</option>
+      <option>Third Year</option>
+    </select>
+    <label for="testFilter">Test</label>
+    <select id="testFilter"><option value="">All tests</option></select>
+    <button id="loadBtn" style="margin-top:20px;">Load results</button>
+    <button class="secondary" id="exportBtn" style="margin-top:20px;">Export CSV</button>
+  </div>
+
+  <div id="resultsWrap"></div>
+</div>
+
+<div id="gradeOverlay" class="overlay" style="display:none;">
+  <div class="box card" style="text-align:left; max-width:600px; color:var(--ink); background:var(--white);">
+    <h2 id="gradeTitle"></h2>
+    <div id="gradeBody" style="max-height:50vh; overflow-y:auto;"></div>
+    <div style="margin-top:16px; display:flex; gap:10px;">
+      <button id="gradeSave">Save marks</button>
+      <button class="secondary" id="gradeClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+document.getElementById('email').value = TEACHER_EMAIL;
+
+let manifest = [];
+fetch('data/tests/manifest.json').then(r => r.json()).then(d => manifest = d);
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  try {
+    await auth.signInWithEmailAndPassword(
+      document.getElementById('email').value.trim(),
+      document.getElementById('pw').value
+    );
+  } catch (e) {
+    errEl.textContent = 'Sign-in failed: ' + e.message;
+    errEl.style.display = 'block';
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
+
+auth.onAuthStateChanged(user => {
+  document.getElementById('loginScreen').style.display = user ? 'none' : 'block';
+  document.getElementById('dashScreen').style.display = user ? 'block' : 'none';
+});
+
+document.getElementById('classFilter').addEventListener('change', () => {
+  const cls = document.getElementById('classFilter').value;
+  const testFilter = document.getElementById('testFilter');
+  const matches = cls ? manifest.filter(t => t.className === cls) : manifest;
+  testFilter.innerHTML = '<option value="">All tests</option>' +
+    matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+});
+
+let currentRows = []; // {id, data, testDef}
+const testDefCache = {};
+
+async function getTestDef(testId) {
+  if (testDefCache[testId]) return testDefCache[testId];
+  const def = await fetch('data/tests/' + testId + '.json').then(r => r.json());
+  testDefCache[testId] = def;
+  return def;
+}
+
+document.getElementById('loadBtn').addEventListener('click', loadResults);
+
+async function loadResults() {
+  const resultsWrap = document.getElementById('resultsWrap');
+  resultsWrap.innerHTML = '<p class="lede">Loading…</p>';
+  const cls = document.getElementById('classFilter').value;
+  const testId = document.getElementById('testFilter').value;
+
+  let query = db.collection('results');
+  if (testId) query = query.where('testId', '==', testId);
+  else if (cls) query = query.where('className', '==', cls);
+
+  const snap = await query.orderBy('submittedAt', 'desc').get().catch(async () => {
+    // Fallback if a composite index isn't set up yet: fetch unsorted.
+    return await query.get();
+  });
+
+  currentRows = [];
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const testDef = await getTestDef(data.testId).catch(() => null);
+    currentRows.push({ id: doc.id, data, testDef });
+  }
+  renderTable();
+}
+
+function renderTable() {
+  const resultsWrap = document.getElementById('resultsWrap');
+  if (currentRows.length === 0) {
+    resultsWrap.innerHTML = '<p class="lede">No submissions match this filter yet.</p>';
+    return;
+  }
+  let html = '<h2>' + currentRows.length + ' submission(s)</h2><table><thead><tr>' +
+    '<th>Student</th><th>Class</th><th>Test</th><th>MCQ</th><th>Short answer</th><th>Total</th><th>Flags</th><th></th>' +
+    '</tr></thead><tbody>';
+  currentRows.forEach(row => {
+    const d = row.data;
+    const saMax = row.testDef ? row.testDef.shortAnswer.reduce((s, q) => s + q.marks, 0) : '?';
+    const saDisplay = d.shortAnswerGraded ? `${d.shortAnswerMarks} / ${saMax}` : `ungraded / ${saMax}`;
+    const total = d.shortAnswerGraded ? (d.mcqScore + d.shortAnswerMarks) : d.mcqScore + ' (+ungraded)';
+    const totalMax = row.testDef ? (row.testDef.mcq.reduce((s,q)=>s+q.marks,0) + saMax) : '?';
+    html += `<tr>
+      <td>${escapeHtml(d.name)}<br><span style="color:var(--slate); font-size:12px;">${escapeHtml(d.roll)}</span></td>
+      <td>${escapeHtml(d.className)}</td>
+      <td>${escapeHtml(d.testTitle || d.testId)}</td>
+      <td>${d.mcqScore} / ${d.mcqTotal}</td>
+      <td>${saDisplay}</td>
+      <td>${total} / ${totalMax}</td>
+      <td><span class="pill ${d.violations > 0 ? 'danger' : 'ok'}">${d.violations}${d.autoSubmitted ? ' · auto' : ''}</span></td>
+      <td><button class="secondary" data-id="${row.id}" data-action="grade">Grade</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  resultsWrap.innerHTML = html;
+  resultsWrap.querySelectorAll('[data-action="grade"]').forEach(btn =>
+    btn.addEventListener('click', () => openGrade(btn.dataset.id))
+  );
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+let gradingRow = null;
+function openGrade(rowId) {
+  const row = currentRows.find(r => r.id === rowId);
+  if (!row || !row.testDef) { alert('Could not load the question set for this submission.'); return; }
+  gradingRow = row;
+  document.getElementById('gradeTitle').textContent = `${row.data.name} — ${row.testDef.title}`;
+  let html = '';
+  html += '<h3 style="font-size:14px; color:var(--slate);">Multiple choice (auto-graded)</h3>';
+  row.testDef.mcq.forEach((q, i) => {
+    const given = row.data.answers[q.id];
+    const correct = given === q.correctIndex;
+    html += `<p style="font-size:13px; margin:4px 0;">
+      Q${i+1}: ${given === null || given === undefined ? '<em>no answer</em>' : escapeHtml(q.options[given])}
+      <span class="pill ${correct ? 'ok' : 'danger'}">${correct ? 'correct' : 'incorrect'}</span>
+    </p>`;
+  });
+  html += '<h3 style="font-size:14px; color:var(--slate); margin-top:16px;">Short answer (grade manually)</h3>';
+  row.testDef.shortAnswer.forEach((q, i) => {
+    const ans = row.data.answers[q.id] || '';
+    const prevMark = (row.data.shortAnswerMarksMap && row.data.shortAnswerMarksMap[q.id] != null)
+      ? row.data.shortAnswerMarksMap[q.id] : '';
+    html += `<div style="margin-bottom:14px;">
+      <p style="font-size:13px; font-weight:600; margin:0 0 4px;">${escapeHtml(q.question)} (${q.marks} marks)</p>
+      <p style="font-size:14px; background:var(--paper); padding:10px; border-radius:4px; white-space:pre-wrap;">${escapeHtml(ans) || '<em>no answer</em>'}</p>
+      <label style="margin:6px 0 2px;">Marks (out of ${q.marks})</label>
+      <input type="text" inputmode="decimal" data-qid="${q.id}" data-max="${q.marks}" class="sa-mark" value="${prevMark}" style="width:100px;">
+    </div>`;
+  });
+  document.getElementById('gradeBody').innerHTML = html;
+  document.getElementById('gradeOverlay').style.display = 'flex';
+}
+
+document.getElementById('gradeClose').addEventListener('click', () => {
+  document.getElementById('gradeOverlay').style.display = 'none';
+});
+
+document.getElementById('gradeSave').addEventListener('click', async () => {
+  if (!gradingRow) return;
+  const inputs = document.querySelectorAll('.sa-mark');
+  const marksMap = {};
+  let total = 0;
+  let allEntered = true;
+  inputs.forEach(inp => {
+    const max = parseFloat(inp.dataset.max);
+    let val = parseFloat(inp.value);
+    if (isNaN(val)) { allEntered = false; val = 0; }
+    if (val > max) val = max;
+    if (val < 0) val = 0;
+    marksMap[inp.dataset.qid] = val;
+    total += val;
+  });
+  await db.collection('results').doc(gradingRow.id).update({
+    shortAnswerMarksMap: marksMap,
+    shortAnswerMarks: total,
+    shortAnswerGraded: allEntered
+  });
+  document.getElementById('gradeOverlay').style.display = 'none';
+  await loadResults();
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (currentRows.length === 0) { alert('Load results first.'); return; }
+  const headers = ['Name', 'Roll', 'Class', 'Test', 'MCQ Score', 'MCQ Total', 'Short Answer', 'SA Total', 'Grand Total', 'Violations', 'Auto-submitted', 'Submitted At'];
+  const lines = [headers.join(',')];
+  currentRows.forEach(row => {
+    const d = row.data;
+    const saMax = row.testDef ? row.testDef.shortAnswer.reduce((s, q) => s + q.marks, 0) : '';
+    const submittedAt = d.submittedAt && d.submittedAt.toDate ? d.submittedAt.toDate().toISOString() : '';
+    const fields = [
+      d.name, d.roll, d.className, d.testTitle || d.testId,
+      d.mcqScore, d.mcqTotal,
+      d.shortAnswerGraded ? d.shortAnswerMarks : 'ungraded', saMax,
+      d.shortAnswerGraded ? (d.mcqScore + d.shortAnswerMarks) : '',
+      d.violations, d.autoSubmitted ? 'yes' : 'no', submittedAt
+    ];
+    lines.push(fields.map(f => `"${String(f).replace(/"/g, '""')}"`).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'results.csv';
+  a.click();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test in progress</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="no-select">
+
+<div id="preScreen" class="wrap">
+  <div class="card" id="preCard">
+    <h1 id="preTitle">Loading test…</h1>
+    <p class="lede" id="preMeta"></p>
+    <div class="banner warn">
+      <strong>Read before starting:</strong>
+      <ul style="margin:8px 0 0; padding-left:18px;">
+        <li>The test will open in full-screen mode.</li>
+        <li>Switching tabs, minimizing, exiting full-screen, right-clicking, or copy/paste will be logged as a violation.</li>
+        <li>After <span id="maxVLabel"></span> violations, your test is submitted automatically as-is.</li>
+        <li>The timer starts the moment you click "Begin" and cannot be paused.</li>
+      </ul>
+    </div>
+    <button id="beginBtn">Begin test in full-screen</button>
+  </div>
+</div>
+
+<div id="examScreen" style="display:none;">
+  <div class="top-bar">
+    <div class="meta" id="whoami"></div>
+    <div>
+      <span class="pill" id="violPill">0 flags</span>
+      &nbsp;
+      <span class="timer" id="timerEl">--:--</span>
+    </div>
+  </div>
+  <div class="wrap wide">
+    <div id="questionsRoot"></div>
+    <button id="submitBtn" style="margin-top:12px;">Submit test</button>
+  </div>
+</div>
+
+<div id="doneScreen" class="wrap" style="display:none;">
+  <div class="card">
+    <h1>Test submitted</h1>
+    <p class="lede" id="doneMsg"></p>
+  </div>
+</div>
+
+<div id="warnOverlay" class="overlay" style="display:none;">
+  <div class="box">
+    <h2>Flagged: possible violation</h2>
+    <p id="warnText"></p>
+    <button id="warnAck">Return to full-screen and continue</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const session = JSON.parse(sessionStorage.getItem('examSession') || 'null');
+if (!session) {
+  window.location.href = 'index.html';
+}
+
+let test = null;
+let violations = 0;
+let violationLog = [];
+let timeLeft = 0;
+let timerHandle = null;
+let submitted = false;
+let examActive = false;
+
+fetch('data/tests/' + session.testId + '.json')
+  .then(r => r.json())
+  .then(data => {
+    test = data;
+    document.getElementById('preTitle').textContent = test.title;
+    document.getElementById('preMeta').textContent =
+      `${session.name} (${session.roll}) — ${test.className} — ${test.durationMinutes} minutes, ${test.mcq.length + test.shortAnswer.length} questions`;
+    document.getElementById('maxVLabel').textContent = test.maxViolations;
+  })
+  .catch(() => {
+    document.getElementById('preTitle').textContent = 'Could not load this test.';
+    document.getElementById('preMeta').textContent = 'Please tell your teacher and try again.';
+  });
+
+document.getElementById('beginBtn').addEventListener('click', async () => {
+  try {
+    await document.documentElement.requestFullscreen();
+  } catch (e) {
+    alert('Full-screen is required to begin. Please allow it and try again.');
+    return;
+  }
+  startExam();
+});
+
+function startExam() {
+  document.getElementById('preScreen').style.display = 'none';
+  document.getElementById('examScreen').style.display = 'block';
+  document.getElementById('whoami').textContent = `${session.name} · ${session.roll} · ${test.className}`;
+  renderQuestions();
+  timeLeft = test.durationMinutes * 60;
+  updateTimer();
+  timerHandle = setInterval(() => {
+    timeLeft--;
+    updateTimer();
+    if (timeLeft <= 0) {
+      clearInterval(timerHandle);
+      submitTest(true, 'Time expired.');
+    }
+  }, 1000);
+  examActive = true;
+  attachMonitoring();
+}
+
+function updateTimer() {
+  const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+  const s = (timeLeft % 60).toString().padStart(2, '0');
+  const el = document.getElementById('timerEl');
+  el.textContent = `${m}:${s}`;
+  el.classList.toggle('low', timeLeft <= 60);
+}
+
+function renderQuestions() {
+  const root = document.getElementById('questionsRoot');
+  let html = '';
+  test.mcq.forEach((q, i) => {
+    html += `<div class="question">
+      <div class="q-num">Question ${i + 1} · ${q.marks} marks</div>
+      <div class="q-text">${escapeHtml(q.question)}</div>
+      ${q.options.map((opt, oi) => `
+        <label class="option">
+          <input type="radio" name="${q.id}" value="${oi}">
+          <span>${escapeHtml(opt)}</span>
+        </label>`).join('')}
+    </div>`;
+  });
+  test.shortAnswer.forEach((q, i) => {
+    html += `<div class="question">
+      <div class="q-num">Question ${test.mcq.length + i + 1} · ${q.marks} marks · short answer</div>
+      <div class="q-text">${escapeHtml(q.question)}</div>
+      <textarea name="${q.id}" data-short="1" placeholder="Type your answer here…"></textarea>
+    </div>`;
+  });
+  root.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ---- Proctoring ----
+let lastFlagAt = 0;
+function flag(reason) {
+  const now = Date.now();
+  if (now - lastFlagAt < 1500) return; // dedupe near-simultaneous events
+  lastFlagAt = now;
+  if (!examActive || submitted) return;
+  violations++;
+  violationLog.push({ reason, at: new Date().toISOString() });
+  document.getElementById('violPill').textContent = violations + ' flag' + (violations === 1 ? '' : 's');
+  document.getElementById('violPill').className = 'pill danger';
+  if (violations >= test.maxViolations) {
+    submitTest(true, 'Automatically submitted after repeated violations (' + reason + ').');
+    return;
+  }
+  document.getElementById('warnText').textContent =
+    `Reason: ${reason}. This is flag ${violations} of ${test.maxViolations}. Reaching ${test.maxViolations} auto-submits your test.`;
+  document.getElementById('warnOverlay').style.display = 'flex';
+}
+
+document.getElementById('warnAck').addEventListener('click', async () => {
+  document.getElementById('warnOverlay').style.display = 'none';
+  if (!document.fullscreenElement) {
+    try { await document.documentElement.requestFullscreen(); } catch (e) {}
+  }
+});
+
+function attachMonitoring() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flag('tab switched or window minimized');
+  });
+  window.addEventListener('blur', () => {
+    if (examActive) flag('window lost focus');
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && examActive && !submitted) flag('exited full-screen');
+  });
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('copy', e => { e.preventDefault(); flag('copy attempted'); });
+  document.addEventListener('cut', e => { e.preventDefault(); flag('cut attempted'); });
+  document.addEventListener('paste', e => { e.preventDefault(); flag('paste attempted'); });
+  document.addEventListener('keydown', e => {
+    const blocked =
+      e.key === 'F12' ||
+      (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase())) ||
+      (e.ctrlKey && ['U', 'P', 'S'].includes(e.key.toUpperCase()));
+    if (blocked) {
+      e.preventDefault();
+      flag('restricted key combination');
+    }
+  });
+  window.addEventListener('beforeunload', (e) => {
+    if (examActive && !submitted) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+}
+
+document.getElementById('submitBtn').addEventListener('click', () => {
+  if (confirm('Submit your test now? You cannot make further changes after submitting.')) {
+    submitTest(false, 'Submitted by student.');
+  }
+});
+
+async function submitTest(auto, note) {
+  if (submitted) return;
+  submitted = true;
+  examActive = false;
+  clearInterval(timerHandle);
+  document.getElementById('warnOverlay').style.display = 'none';
+
+  const answers = {};
+  let mcqScore = 0;
+  let mcqTotal = 0;
+  test.mcq.forEach(q => {
+    mcqTotal += q.marks;
+    const sel = document.querySelector(`input[name="${q.id}"]:checked`);
+    const val = sel ? parseInt(sel.value, 10) : null;
+    answers[q.id] = val;
+    if (val === q.correctIndex) mcqScore += q.marks;
+  });
+  test.shortAnswer.forEach(q => {
+    const ta = document.querySelector(`textarea[name="${q.id}"]`);
+    answers[q.id] = ta ? ta.value.trim() : '';
+  });
+
+  const record = {
+    name: session.name,
+    roll: session.roll,
+    className: session.className,
+    testId: test.id,
+    testTitle: test.title,
+    answers,
+    mcqScore,
+    mcqTotal,
+    shortAnswerMarks: null,
+    shortAnswerGraded: false,
+    violations,
+    violationLog,
+    autoSubmitted: auto,
+    submitNote: note,
+    submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    timeLeftAtSubmit: timeLeft
+  };
+
+  try {
+    await db.collection('results').add(record);
+    document.getElementById('doneMsg').textContent =
+      `Thanks, ${session.name}. Your answers were recorded. ${note} Your teacher will grade the short-answer section and share final results.`;
+  } catch (e) {
+    document.getElementById('doneMsg').textContent =
+      'Your test was completed, but there was a problem saving it (' + e.message + '). Please show this screen to your teacher immediately — do not close this tab.';
+  }
+
+  document.getElementById('examScreen').style.display = 'none';
+  document.getElementById('doneScreen').style.display = 'block';
+  sessionStorage.removeItem('examSession');
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+</script>
+</body>
+</html>
