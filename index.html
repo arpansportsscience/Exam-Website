@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports & Exercise Science — Online Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow-row">
+    <span class="dept">Sports &amp; Exercise Science</span>
+    <span class="clock" id="liveClock"></span>
+  </div>
+
+  <h1 style="font-size:clamp(40px,8vw,64px);line-height:0.98;letter-spacing:-0.01em;margin-bottom:14px;">Ready when<br>you are.</h1>
+  <p class="lede">Enter your details to open today's test. Once you start, the session runs full-screen and monitored — read the rules below before you continue.</p>
+
+  <div class="card">
+    <div class="field">
+      <label for="name">Full name</label>
+      <input type="text" id="name" placeholder="As on your class roster" autocomplete="off">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="roll">Roll number / Student ID</label>
+        <input type="text" id="roll" placeholder="e.g. SES-2024-014" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="className">Class</label>
+        <select id="className" disabled>
+          <option value="">Loading tests…</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="testSelect">Test</label>
+      <select id="testSelect" disabled>
+        <option value="">Select your class first</option>
+      </select>
+    </div>
+
+    <div id="err" class="banner error"></div>
+
+    <button id="startBtn" class="btn btn-primary btn-block" disabled style="margin-top:24px;font-family:var(--font-display);font-size:19px;">Start test</button>
+
+    <div class="banner warn">
+      <div>
+        <strong>Before you start</strong>
+        Switching tabs, minimizing the window, exiting full-screen, right-click, or copy/paste is logged. After <span id="maxV">the limit set for this test</span> flags, your test is auto-submitted. Make sure your connection is stable and you won't be interrupted.
+      </div>
+    </div>
+  </div>
+
+  <footer class="note">
+    <a id="teacherLink">Teacher access</a>
+  </footer>
+</div>
+
+<div class="modal-backdrop" id="teacherModal">
+  <div class="modal">
+    <h2>Teacher sign in</h2>
+    <p class="sub">Restricted — students should not use this.</p>
+    <div class="field">
+      <label for="teacherEmail">Email</label>
+      <input type="email" id="teacherEmail" placeholder="you@school.edu" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="teacherPassword">Password</label>
+      <input type="password" id="teacherPassword" placeholder="••••••••" autocomplete="off">
+    </div>
+    <div class="banner error" id="teacherErr" style="margin-top:12px;"></div>
+    <div class="modal-actions">
+      <button id="teacherCancel" type="button" class="btn btn-outline">Cancel</button>
+      <button id="teacherSubmit" type="button" class="btn btn-dark">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script>
+const classNameEl = document.getElementById('className');
+const testSelect = document.getElementById('testSelect');
+const startBtn = document.getElementById('startBtn');
+const errEl = document.getElementById('err');
+let allTests = [];
+let testsLoaded = false;
+
+const clockEl = document.getElementById('liveClock');
+function tickClock(){ clockEl.textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+tickClock();
+setInterval(tickClock, 1000 * 30);
+
+let firebaseReady = false;
+let db;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  firebaseReady = true;
+} catch (e) {
+  console.error('firebase init failed:', e);
+  errEl.textContent = 'Could not connect to the test service. Please tell your teacher.';
+  errEl.style.display = 'flex';
+}
+
+function normalizeClass(v){ return String(v ?? '').trim().toLowerCase(); }
+
+function loadTests(){
+  if (!firebaseReady) return;
+  // Students read tests via an anonymous sign-in (required by firestore.rules).
+  firebase.auth().signInAnonymously()
+    .then(() => db.collection('tests').where('open', '==', true).get())
+    .then(snap => {
+      allTests = [];
+      snap.forEach(doc => allTests.push({ id: doc.id, ...doc.data() }));
+      testsLoaded = true;
+
+      const classes = [...new Set(allTests.map(t => t.className).filter(Boolean))];
+      if (classes.length === 0) {
+        classNameEl.innerHTML = '<option value="">No tests currently open</option>';
+        classNameEl.disabled = true;
+        errEl.textContent = 'No tests are open for any class right now. Please tell your teacher.';
+        errEl.style.display = 'flex';
+        return;
+      }
+      classNameEl.innerHTML = '<option value="">Select your class</option>' +
+        classes.map(c => `<option value="${c}">${c}</option>`).join('');
+      classNameEl.disabled = false;
+    })
+    .catch(e => {
+      console.error('tests load failed:', e);
+      classNameEl.innerHTML = '<option value="">Could not load classes</option>';
+      errEl.textContent = 'Could not load the list of tests (' + e.message + ').';
+      errEl.style.display = 'flex';
+    });
+}
+loadTests();
+
+classNameEl.addEventListener('change', () => {
+  const cls = classNameEl.value;
+  testSelect.innerHTML = '';
+  if (!cls) {
+    testSelect.disabled = true;
+    testSelect.innerHTML = '<option value="">Select your class first</option>';
+    validate();
+    return;
+  }
+  const clsNorm = normalizeClass(cls);
+  const matches = allTests.filter(t => normalizeClass(t.className) === clsNorm);
+  if (matches.length === 0) {
+    testSelect.disabled = true;
+    testSelect.innerHTML = '<option value="">No tests currently open for your class</option>';
+  } else {
+    testSelect.disabled = false;
+    testSelect.innerHTML = '<option value="">Select a test</option>' +
+      matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+  }
+  validate();
+});
+
+[document.getElementById('name'), document.getElementById('roll'), testSelect].forEach(el =>
+  el.addEventListener('input', validate)
+);
+testSelect.addEventListener('change', () => {
+  const t = allTests.find(x => x.id === testSelect.value);
+  document.getElementById('maxV').textContent = t ? t.maxViolations : 'the limit set for this test';
+  validate();
+});
+
+function validate() {
+  const ok = testsLoaded && firebaseReady &&
+             document.getElementById('name').value.trim().length > 1 &&
+             document.getElementById('roll').value.trim().length > 0 &&
+             classNameEl.value && testSelect.value;
+  startBtn.disabled = !ok;
+}
+
+startBtn.addEventListener('click', () => {
+  const session = {
+    name: document.getElementById('name').value.trim(),
+    roll: document.getElementById('roll').value.trim(),
+    className: classNameEl.value,
+    testId: testSelect.value
+  };
+  sessionStorage.setItem('examSession', JSON.stringify(session));
+  window.location.href = 'test.html';
+});
+
+/* ---------------- Teacher access (password-gated) ---------------- */
+const teacherModal = document.getElementById('teacherModal');
+const teacherLink = document.getElementById('teacherLink');
+const teacherCancel = document.getElementById('teacherCancel');
+const teacherSubmit = document.getElementById('teacherSubmit');
+const teacherEmail = document.getElementById('teacherEmail');
+const teacherPassword = document.getElementById('teacherPassword');
+const teacherErr = document.getElementById('teacherErr');
+
+function openTeacherModal(){
+  teacherErr.style.display = 'none';
+  teacherEmail.value = '';
+  teacherPassword.value = '';
+  teacherModal.classList.add('open');
+  teacherEmail.focus();
+}
+function closeTeacherModal(){ teacherModal.classList.remove('open'); }
+
+teacherLink.addEventListener('click', openTeacherModal);
+teacherCancel.addEventListener('click', closeTeacherModal);
+teacherModal.addEventListener('click', (e) => { if (e.target === teacherModal) closeTeacherModal(); });
+teacherPassword.addEventListener('keydown', (e) => { if (e.key === 'Enter') teacherSubmit.click(); });
+
+teacherSubmit.addEventListener('click', async () => {
+  if (!firebaseReady) {
+    teacherErr.textContent = 'Test service is unavailable right now.';
+    teacherErr.style.display = 'block';
+    return;
+  }
+  const email = teacherEmail.value.trim();
+  const pw = teacherPassword.value;
+  if (!email || !pw) {
+    teacherErr.textContent = 'Enter both email and password.';
+    teacherErr.style.display = 'block';
+    return;
+  }
+  teacherSubmit.disabled = true;
+  teacherSubmit.textContent = 'Signing in…';
+  teacherErr.style.display = 'none';
+  try {
+    if (firebase.auth().currentUser) await firebase.auth().signOut();
+    await firebase.auth().signInWithEmailAndPassword(email, pw);
+    window.location.href = 'teacher.html';
+  } catch (e) {
+    teacherErr.textContent = 'Sign-in failed. Check your email and password.';
+    teacherErr.style.display = 'block';
+    teacherSubmit.disabled = false;
+    teacherSubmit.textContent = 'Sign in';
+  }
+});
+</script>
+</body>
+</html>
