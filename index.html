@@ -4,41 +4,231 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sports & Exercise Science — Online Test</title>
-<link rel="stylesheet" href="assets/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#10161A;
+    --ink-2:#1A2228;
+    --chalk:#F6F4EE;
+    --line:#2E3A41;
+    --go:#C6FF3D;
+    --go-ink:#0F1A02;
+    --slate:#93A0A6;
+    --white:#FFFFFF;
+    --danger:#FF6B57;
+    --radius:14px;
+    --font-display:'Big Shoulders Display', 'Inter', sans-serif;
+    --font-body:'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(198,255,61,0.10), transparent 60%),
+      repeating-linear-gradient(to bottom, transparent 0 79px, rgba(255,255,255,0.035) 79px 80px);
+    color:var(--white);
+    font-family:var(--font-body);
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:64px 24px 80px;
+  }
+  .wrap{width:100%;max-width:620px;}
+
+  .eyebrow-row{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:18px;
+  }
+  .dept{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:13px;
+    color:var(--slate);
+    letter-spacing:0.02em;
+  }
+  .clock{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:13px;
+    color:var(--go);
+  }
+
+  h1{
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:clamp(40px, 8vw, 64px);
+    line-height:0.98;
+    letter-spacing:-0.01em;
+    margin:0 0 14px;
+    color:var(--white);
+  }
+  .lede{
+    font-size:16px;
+    line-height:1.55;
+    color:#C8D0D4;
+    max-width:52ch;
+    margin:0 0 40px;
+  }
+
+  .card{
+    background:var(--chalk);
+    color:var(--ink);
+    border-radius:var(--radius);
+    padding:36px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,0.55);
+  }
+
+  .field{margin-bottom:22px;}
+  .field:last-of-type{margin-bottom:0;}
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    color:#4B5559;
+    margin-bottom:8px;
+  }
+  input, select{
+    width:100%;
+    padding:13px 14px;
+    font-size:15px;
+    font-family:var(--font-body);
+    color:var(--ink);
+    background:var(--white);
+    border:1.5px solid #D8D4C8;
+    border-radius:9px;
+    appearance:none;
+    -webkit-appearance:none;
+    transition:border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234B5559' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 14px center;
+    padding-right:36px;
+  }
+  input::placeholder{color:#A8A296;}
+  input:focus, select:focus{
+    outline:none;
+    border-color:var(--ink);
+    box-shadow:0 0 0 3px rgba(16,22,26,0.12);
+  }
+  input:disabled, select:disabled{opacity:0.55; cursor:not-allowed;}
+
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media (max-width:520px){ .field-row{grid-template-columns:1fr;} }
+
+  .banner{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    border-radius:10px;
+    padding:16px 18px;
+    margin-top:26px;
+    font-size:13.5px;
+    line-height:1.55;
+  }
+  .banner.warn{
+    background:#EFEADA;
+    color:#3A3325;
+  }
+  .banner strong{display:block; margin-bottom:3px; font-size:13.5px;}
+  .banner svg{flex:0 0 auto; margin-top:2px;}
+  .flag-count{color:var(--ink); font-weight:700;}
+
+  .banner.error{
+    background:#FDECEA;
+    color:#8A2E22;
+    display:none;
+  }
+
+  button#startBtn{
+    width:100%;
+    margin-top:28px;
+    padding:16px 20px;
+    border:none;
+    border-radius:9px;
+    background:var(--go);
+    color:var(--go-ink);
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:19px;
+    letter-spacing:0.01em;
+    cursor:pointer;
+    transition:transform 0.12s ease, background 0.15s ease;
+  }
+  button#startBtn:hover:not(:disabled){background:#B4EE2B;}
+  button#startBtn:active:not(:disabled){transform:scale(0.99);}
+  button#startBtn:disabled{
+    background:#DEDACB;
+    color:#8C8674;
+    cursor:not-allowed;
+  }
+
+  footer.note{
+    text-align:center;
+    color:var(--slate);
+    font-size:12.5px;
+    margin-top:36px;
+  }
+</style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Sports & Exercise Science</h1>
-  <p class="lede">Online test portal. Enter your details below to begin. Once you start, the test runs in a monitored, full-screen session — read the rules before continuing.</p>
 
-  <div class="card">
-    <label for="name">Full name</label>
-    <input type="text" id="name" placeholder="As on your class roster" autocomplete="off">
-
-    <label for="roll">Roll number / Student ID</label>
-    <input type="text" id="roll" placeholder="e.g. SES-2024-014" autocomplete="off">
-
-    <label for="className">Class</label>
-    <select id="className">
-      <option value="">Select your class</option>
-      <option>First Year</option>
-      <option>Second Year</option>
-      <option>Third Year</option>
-    </select>
-
-    <label for="testSelect">Test</label>
-    <select id="testSelect">
-      <option value="">Select your class first</option>
-    </select>
-
-    <div id="err" class="banner warn" style="display:none; margin-top:20px;"></div>
-
-    <button id="startBtn" style="margin-top:24px;" disabled>Start test</button>
+  <div class="eyebrow-row">
+    <span class="dept">Sports &amp; Exercise Science</span>
+    <span class="clock" id="liveClock"></span>
   </div>
 
-  <div class="banner">
-    <strong>Before you start:</strong> the test opens in full-screen. Switching tabs, minimizing the window, exiting full-screen, or copy/pasting is logged. After
-    <span id="maxV">3</span> such flags, your test is auto-submitted. Make sure you have a stable connection and won't be interrupted.
+  <h1>Ready when<br>you are.</h1>
+  <p class="lede">Enter your details to open today's test. Once you start, the session runs full-screen and monitored — read the rules below before you continue.</p>
+
+  <div class="card">
+    <div class="field">
+      <label for="name">Full name</label>
+      <input type="text" id="name" placeholder="As on your class roster" autocomplete="off">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="roll">Roll number / Student ID</label>
+        <input type="text" id="roll" placeholder="e.g. SES-2024-014" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="className">Class</label>
+        <select id="className">
+          <option value="">Select your class</option>
+          <option>First Year</option>
+          <option>Second Year</option>
+          <option>Third Year</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="testSelect">Test</label>
+      <select id="testSelect" disabled>
+        <option value="">Select your class first</option>
+      </select>
+    </div>
+
+    <div id="err" class="banner error"></div>
+
+    <button id="startBtn" disabled>Start test</button>
+
+    <div class="banner warn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#3A3325" stroke-width="1.6"/><path d="M12 7v5l3.5 2" stroke="#3A3325" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <div>
+        <strong>Before you start</strong>
+        Switching tabs, minimizing the window, exiting full-screen, or copy/pasting is logged. After <span class="flag-count" id="maxV">3</span> flags, your test is auto-submitted. Make sure your connection is stable and you won't be interrupted.
+      </div>
+    </div>
   </div>
 
   <footer class="note">Teacher access is on a separate page and is not linked here for students.</footer>
@@ -56,11 +246,18 @@ const startBtn = document.getElementById('startBtn');
 const errEl = document.getElementById('err');
 let manifest = [];
 
+const clockEl = document.getElementById('liveClock');
+function tickClock(){
+  clockEl.textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+tickClock();
+setInterval(tickClock, 1000 * 30);
+
 fetch('data/tests/manifest.json').then(r => r.json()).then(data => {
   manifest = data;
 }).catch(() => {
   errEl.textContent = 'Could not load the list of tests. Please tell your teacher.';
-  errEl.style.display = 'block';
+  errEl.style.display = 'flex';
 });
 
 classNameEl.addEventListener('change', () => {
@@ -68,10 +265,13 @@ classNameEl.addEventListener('change', () => {
   testSelect.innerHTML = '';
   const matches = manifest.filter(t => t.className === cls);
   if (!cls) {
+    testSelect.disabled = true;
     testSelect.innerHTML = '<option value="">Select your class first</option>';
   } else if (matches.length === 0) {
+    testSelect.disabled = true;
     testSelect.innerHTML = '<option value="">No tests currently open for your class</option>';
   } else {
+    testSelect.disabled = false;
     testSelect.innerHTML = '<option value="">Select a test</option>' +
       matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
   }
@@ -106,7 +306,7 @@ startBtn.addEventListener('click', async () => {
     window.location.href = 'test.html';
   } catch (e) {
     errEl.textContent = 'Could not start a secure session (' + e.message + '). Check your connection and try again.';
-    errEl.style.display = 'block';
+    errEl.style.display = 'flex';
     startBtn.disabled = false;
     startBtn.textContent = 'Start test';
   }
