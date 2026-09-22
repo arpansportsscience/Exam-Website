@@ -1,0 +1,49 @@
+{
+  "id": "y2-biomech-mid",
+  "title": "Biomechanics — Mid Term",
+  "className": "Second Year",
+  "durationMinutes": 30,
+  "maxViolations": 3,
+  "mcq": [
+    {
+      "id": "m1",
+      "question": "Torque is best defined as:",
+      "options": ["Force applied over time", "The rotational effect of a force", "Mass times velocity", "Force divided by area"],
+      "correctIndex": 1,
+      "marks": 2
+    },
+    {
+      "id": "m2",
+      "question": "Which law of motion explains why a sprinter's block push produces forward acceleration?",
+      "options": ["Newton's First Law", "Newton's Second Law", "Newton's Third Law", "Law of conservation of energy"],
+      "correctIndex": 2,
+      "marks": 2
+    },
+    {
+      "id": "m3",
+      "question": "The centre of mass of the human body in anatomical position is located approximately:",
+      "options": ["At the sternum", "Just anterior to S2, in the pelvis", "At the navel surface", "In the femur"],
+      "correctIndex": 1,
+      "marks": 2
+    },
+    {
+      "id": "m4",
+      "question": "Angular momentum is conserved during a somersault primarily by changing:",
+      "options": ["Body mass", "Moment of inertia", "Gravitational force", "Air resistance"],
+      "correctIndex": 1,
+      "marks": 2
+    }
+  ],
+  "shortAnswer": [
+    {
+      "id": "s1",
+      "question": "Explain how increasing stride length versus stride frequency affects sprint velocity.",
+      "marks": 5
+    },
+    {
+      "id": "s2",
+      "question": "Using a lever system of your choice in the body, explain mechanical advantage.",
+      "marks": 5
+    }
+  ]
+}

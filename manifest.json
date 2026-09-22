@@ -1,0 +1,5 @@
+[
+  { "id": "y1-anatomy-mid", "title": "Anatomy & Physiology — Mid Term", "className": "First Year" },
+  { "id": "y2-biomech-mid", "title": "Biomechanics — Mid Term", "className": "Second Year" },
+  { "id": "y3-exphys-mid", "title": "Exercise Physiology — Mid Term", "className": "Third Year" }
+]
