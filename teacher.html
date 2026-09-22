@@ -3,55 +3,126 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teacher dashboard</title>
-<link rel="stylesheet" href="assets/style.css">
+<title>Teacher panel — Sports & Exercise Science</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#10161A; --chalk:#F6F4EE; --go:#C6FF3D; --go-ink:#0F1A02; --slate:#93A0A6;
+    --font-display:'Big Shoulders Display','Inter',sans-serif;
+    --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--ink); color:#fff; font-family:var(--font-body); min-height:100vh;}
+  .wrap{max-width:900px; margin:0 auto; padding:56px 24px 100px;}
+  h1{font-family:var(--font-display); font-weight:800; font-size:40px; margin:0 0 6px;}
+  .sub{color:var(--slate); margin-bottom:36px;}
+  section{background:var(--chalk); color:var(--ink); border-radius:14px; padding:30px; margin-bottom:28px;}
+  section h2{font-family:var(--font-display); font-weight:700; font-size:22px; margin:0 0 18px;}
+  label{display:block; font-size:13px; font-weight:600; color:#4B5559; margin-bottom:6px;}
+  input, select, textarea{
+    width:100%; padding:11px 12px; font-size:14.5px; font-family:var(--font-body);
+    border:1.5px solid #D8D4C8; border-radius:8px; background:#fff; color:var(--ink); margin-bottom:16px;
+  }
+  .row{display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px;}
+  @media (max-width:640px){ .row{grid-template-columns:1fr;} }
+  .qcard{border:1.5px solid #D8D4C8; border-radius:10px; padding:16px; margin-bottom:14px;}
+  .qcard .optrow{display:grid; grid-template-columns:24px 1fr; gap:10px; align-items:center; margin-bottom:8px;}
+  .qcard .optrow input[type="radio"]{width:auto; margin:0;}
+  .qcard .optrow input[type="text"]{margin:0;}
+  button{
+    padding:12px 20px; border:none; border-radius:8px; font-family:var(--font-display);
+    font-weight:700; font-size:15px; cursor:pointer;
+  }
+  .btn-primary{background:var(--go); color:var(--go-ink);}
+  .btn-ghost{background:transparent; border:1.5px solid var(--ink); color:var(--ink);}
+  .btn-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
+  pre{background:#0E1418; color:#C6FF3D; padding:16px; border-radius:8px; overflow:auto; font-size:12.5px; max-height:260px;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th, td{text-align:left; padding:9px 10px; border-bottom:1px solid #E2DECF;}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#6B7580;}
+  .gate{display:flex; flex-direction:column; gap:12px; max-width:340px;}
+  .flag-warn{color:#8A2E22; font-size:12.5px; margin-top:-6px;}
+</style>
 </head>
 <body>
+<div class="wrap">
+  <h1>Teacher panel</h1>
+  <p class="sub">Add tests and review results.</p>
 
-<div id="loginScreen" class="wrap">
-  <h1>Teacher login</h1>
-  <p class="lede">Sign in to view results and grade short-answer responses.</p>
-  <div class="card">
-    <label for="email">Email</label>
-    <input type="text" id="email">
-    <label for="pw">Password</label>
-    <input type="password" id="pw">
-    <div id="loginErr" class="banner warn" style="display:none; margin-top:16px;"></div>
-    <button id="loginBtn" style="margin-top:20px;">Sign in</button>
-  </div>
-</div>
-
-<div id="dashScreen" class="wrap wide" style="display:none;">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <h1>Results dashboard</h1>
-    <button class="secondary" id="signOutBtn">Sign out</button>
-  </div>
-
-  <div class="card">
-    <label for="classFilter">Class</label>
-    <select id="classFilter">
-      <option value="">All classes</option>
-      <option>First Year</option>
-      <option>Second Year</option>
-      <option>Third Year</option>
-    </select>
-    <label for="testFilter">Test</label>
-    <select id="testFilter"><option value="">All tests</option></select>
-    <button id="loadBtn" style="margin-top:20px;">Load results</button>
-    <button class="secondary" id="exportBtn" style="margin-top:20px;">Export CSV</button>
-  </div>
-
-  <div id="resultsWrap"></div>
-</div>
-
-<div id="gradeOverlay" class="overlay" style="display:none;">
-  <div class="box card" style="text-align:left; max-width:600px; color:var(--ink); background:var(--white);">
-    <h2 id="gradeTitle"></h2>
-    <div id="gradeBody" style="max-height:50vh; overflow-y:auto;"></div>
-    <div style="margin-top:16px; display:flex; gap:10px;">
-      <button id="gradeSave">Save marks</button>
-      <button class="secondary" id="gradeClose">Close</button>
+  <section id="loginSection">
+    <h2>Sign in</h2>
+    <div class="gate">
+      <div>
+        <label for="email">Email</label>
+        <input type="email" id="email">
+      </div>
+      <div>
+        <label for="pass">Password</label>
+        <input type="password" id="pass">
+      </div>
+      <div id="loginErr" class="flag-warn" style="display:none;"></div>
+      <button class="btn-primary" id="loginBtn">Sign in</button>
     </div>
+  </section>
+
+  <div id="appSections" style="display:none;">
+
+    <section>
+      <h2>Add a test</h2>
+      <div class="row">
+        <div>
+          <label for="tTitle">Test title</label>
+          <input type="text" id="tTitle" placeholder="e.g. Biomechanics — Mid Term">
+        </div>
+        <div>
+          <label for="tClass">Class</label>
+          <select id="tClass">
+            <option>First Year</option>
+            <option>Second Year</option>
+            <option>Third Year</option>
+          </select>
+        </div>
+        <div>
+          <label for="tDuration">Duration (min)</label>
+          <input type="number" id="tDuration" value="45">
+        </div>
+      </div>
+      <label for="tId">Test ID (used in the file name — lowercase, no spaces)</label>
+      <input type="text" id="tId" placeholder="e.g. y2-biomech-mid">
+
+      <div id="qList"></div>
+      <div class="btn-row">
+        <button class="btn-ghost" id="addQBtn">+ Add question</button>
+      </div>
+
+      <div class="btn-row" style="margin-top:22px;">
+        <button class="btn-primary" id="buildBtn">Generate files</button>
+      </div>
+
+      <div id="buildOutput" style="display:none; margin-top:20px;">
+        <label>1. Save this as <code id="fileName"></code> in <code>data/tests/</code></label>
+        <pre id="testJsonOut"></pre>
+        <div class="btn-row" style="margin-bottom:20px;">
+          <button class="btn-ghost" id="downloadJsonBtn">Download this file</button>
+        </div>
+        <label>2. Add this entry to <code>data/tests/manifest.json</code>, then commit and push both files</label>
+        <pre id="manifestOut"></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Results</h2>
+      <div class="btn-row" style="margin-bottom:18px;">
+        <button class="btn-ghost" id="refreshBtn">Refresh</button>
+        <button class="btn-primary" id="exportBtn">Export CSV</button>
+      </div>
+      <table id="resultsTable">
+        <thead>
+          <tr><th>Name</th><th>Roll</th><th>Class</th><th>Test</th><th>Score</th><th>Flags</th><th>Submitted</th></tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </section>
   </div>
 </div>
 
@@ -61,198 +132,126 @@
 <script src="assets/firebase-config.js"></script>
 <script>
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
 const db = firebase.firestore();
-document.getElementById('email').value = TEACHER_EMAIL;
+let currentResults = [];
 
-let manifest = [];
-fetch('data/tests/manifest.json').then(r => r.json()).then(d => manifest = d);
-
+// --- Auth gate ---
 document.getElementById('loginBtn').addEventListener('click', async () => {
+  const email = document.getElementById('email').value.trim();
+  const pass = document.getElementById('pass').value;
   const errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
   try {
-    await auth.signInWithEmailAndPassword(
-      document.getElementById('email').value.trim(),
-      document.getElementById('pw').value
-    );
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
   } catch (e) {
     errEl.textContent = 'Sign-in failed: ' + e.message;
     errEl.style.display = 'block';
   }
 });
 
-document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
-
-auth.onAuthStateChanged(user => {
-  document.getElementById('loginScreen').style.display = user ? 'none' : 'block';
-  document.getElementById('dashScreen').style.display = user ? 'block' : 'none';
+firebase.auth().onAuthStateChanged(user => {
+  const signedIn = !!user && !user.isAnonymous;
+  document.getElementById('loginSection').style.display = signedIn ? 'none' : 'block';
+  document.getElementById('appSections').style.display = signedIn ? 'block' : 'none';
+  if (signedIn) loadResults();
 });
 
-document.getElementById('classFilter').addEventListener('change', () => {
-  const cls = document.getElementById('classFilter').value;
-  const testFilter = document.getElementById('testFilter');
-  const matches = cls ? manifest.filter(t => t.className === cls) : manifest;
-  testFilter.innerHTML = '<option value="">All tests</option>' +
-    matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+// --- Question builder ---
+let qCount = 0;
+function addQuestion(){
+  qCount++;
+  const id = 'q' + qCount;
+  const div = document.createElement('div');
+  div.className = 'qcard';
+  div.dataset.qid = id;
+  div.innerHTML = `
+    <label>Question ${qCount}</label>
+    <input type="text" class="qtext" placeholder="Question text">
+    ${[0,1,2,3].map(i => `
+      <div class="optrow">
+        <input type="radio" name="correct_${id}" value="${i}" ${i===0 ? 'checked' : ''}>
+        <input type="text" class="opt" placeholder="Option ${i+1}">
+      </div>
+    `).join('')}
+  `;
+  document.getElementById('qList').appendChild(div);
+}
+document.getElementById('addQBtn').addEventListener('click', addQuestion);
+addQuestion(); addQuestion(); addQuestion();
+
+document.getElementById('buildBtn').addEventListener('click', () => {
+  const id = document.getElementById('tId').value.trim();
+  const title = document.getElementById('tTitle').value.trim();
+  const className = document.getElementById('tClass').value;
+  const durationMinutes = parseInt(document.getElementById('tDuration').value, 10) || 45;
+
+  if (!id || !title) { alert('Give the test an ID and a title first.'); return; }
+
+  const questions = [];
+  document.querySelectorAll('.qcard').forEach(card => {
+    const text = card.querySelector('.qtext').value.trim();
+    const opts = Array.from(card.querySelectorAll('.opt')).map(o => o.value.trim());
+    const correctRadio = card.querySelector(`input[type="radio"]:checked`);
+    const correctIndex = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+    if (text && opts.every(o => o)) {
+      questions.push({ id: card.dataset.qid, text, options: opts, correctIndex });
+    }
+  });
+
+  if (questions.length === 0) { alert('Add at least one complete question.'); return; }
+
+  const testDef = { id, title, className, durationMinutes, questions };
+  const testJson = JSON.stringify(testDef, null, 2);
+  const manifestEntry = JSON.stringify({ id, title, className }, null, 2);
+
+  document.getElementById('fileName').textContent = `data/tests/${id}.json`;
+  document.getElementById('testJsonOut').textContent = testJson;
+  document.getElementById('manifestOut').textContent = manifestEntry;
+  document.getElementById('buildOutput').style.display = 'block';
+
+  document.getElementById('downloadJsonBtn').onclick = () => {
+    const blob = new Blob([testJson], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${id}.json`;
+    a.click();
+  };
 });
 
-let currentRows = []; // {id, data, testDef}
-const testDefCache = {};
-
-async function getTestDef(testId) {
-  if (testDefCache[testId]) return testDefCache[testId];
-  const def = await fetch('data/tests/' + testId + '.json').then(r => r.json());
-  testDefCache[testId] = def;
-  return def;
+// --- Results ---
+async function loadResults(){
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+  const snap = await db.collection('results').orderBy('submittedAt', 'desc').get();
+  currentResults = snap.docs.map(d => d.data());
+  tbody.innerHTML = '';
+  currentResults.forEach(r => {
+    const tr = document.createElement('tr');
+    const when = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate().toLocaleString() : '—';
+    tr.innerHTML = `
+      <td>${r.name || ''}</td><td>${r.roll || ''}</td><td>${r.className || ''}</td>
+      <td>${r.testTitle || ''}</td><td>${r.score}/${r.maxScore}</td>
+      <td>${r.flags}${r.submitReason === 'flag_limit' ? ' ⚠' : ''}</td><td>${when}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  if (currentResults.length === 0) tbody.innerHTML = '<tr><td colspan="7">No results yet.</td></tr>';
 }
-
-document.getElementById('loadBtn').addEventListener('click', loadResults);
-
-async function loadResults() {
-  const resultsWrap = document.getElementById('resultsWrap');
-  resultsWrap.innerHTML = '<p class="lede">Loading…</p>';
-  const cls = document.getElementById('classFilter').value;
-  const testId = document.getElementById('testFilter').value;
-
-  let query = db.collection('results');
-  if (testId) query = query.where('testId', '==', testId);
-  else if (cls) query = query.where('className', '==', cls);
-
-  const snap = await query.orderBy('submittedAt', 'desc').get().catch(async () => {
-    // Fallback if a composite index isn't set up yet: fetch unsorted.
-    return await query.get();
-  });
-
-  currentRows = [];
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const testDef = await getTestDef(data.testId).catch(() => null);
-    currentRows.push({ id: doc.id, data, testDef });
-  }
-  renderTable();
-}
-
-function renderTable() {
-  const resultsWrap = document.getElementById('resultsWrap');
-  if (currentRows.length === 0) {
-    resultsWrap.innerHTML = '<p class="lede">No submissions match this filter yet.</p>';
-    return;
-  }
-  let html = '<h2>' + currentRows.length + ' submission(s)</h2><table><thead><tr>' +
-    '<th>Student</th><th>Class</th><th>Test</th><th>MCQ</th><th>Short answer</th><th>Total</th><th>Flags</th><th></th>' +
-    '</tr></thead><tbody>';
-  currentRows.forEach(row => {
-    const d = row.data;
-    const saMax = row.testDef ? row.testDef.shortAnswer.reduce((s, q) => s + q.marks, 0) : '?';
-    const saDisplay = d.shortAnswerGraded ? `${d.shortAnswerMarks} / ${saMax}` : `ungraded / ${saMax}`;
-    const total = d.shortAnswerGraded ? (d.mcqScore + d.shortAnswerMarks) : d.mcqScore + ' (+ungraded)';
-    const totalMax = row.testDef ? (row.testDef.mcq.reduce((s,q)=>s+q.marks,0) + saMax) : '?';
-    html += `<tr>
-      <td>${escapeHtml(d.name)}<br><span style="color:var(--slate); font-size:12px;">${escapeHtml(d.roll)}</span></td>
-      <td>${escapeHtml(d.className)}</td>
-      <td>${escapeHtml(d.testTitle || d.testId)}</td>
-      <td>${d.mcqScore} / ${d.mcqTotal}</td>
-      <td>${saDisplay}</td>
-      <td>${total} / ${totalMax}</td>
-      <td><span class="pill ${d.violations > 0 ? 'danger' : 'ok'}">${d.violations}${d.autoSubmitted ? ' · auto' : ''}</span></td>
-      <td><button class="secondary" data-id="${row.id}" data-action="grade">Grade</button></td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-  resultsWrap.innerHTML = html;
-  resultsWrap.querySelectorAll('[data-action="grade"]').forEach(btn =>
-    btn.addEventListener('click', () => openGrade(btn.dataset.id))
-  );
-}
-
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s == null ? '' : String(s);
-  return d.innerHTML;
-}
-
-let gradingRow = null;
-function openGrade(rowId) {
-  const row = currentRows.find(r => r.id === rowId);
-  if (!row || !row.testDef) { alert('Could not load the question set for this submission.'); return; }
-  gradingRow = row;
-  document.getElementById('gradeTitle').textContent = `${row.data.name} — ${row.testDef.title}`;
-  let html = '';
-  html += '<h3 style="font-size:14px; color:var(--slate);">Multiple choice (auto-graded)</h3>';
-  row.testDef.mcq.forEach((q, i) => {
-    const given = row.data.answers[q.id];
-    const correct = given === q.correctIndex;
-    html += `<p style="font-size:13px; margin:4px 0;">
-      Q${i+1}: ${given === null || given === undefined ? '<em>no answer</em>' : escapeHtml(q.options[given])}
-      <span class="pill ${correct ? 'ok' : 'danger'}">${correct ? 'correct' : 'incorrect'}</span>
-    </p>`;
-  });
-  html += '<h3 style="font-size:14px; color:var(--slate); margin-top:16px;">Short answer (grade manually)</h3>';
-  row.testDef.shortAnswer.forEach((q, i) => {
-    const ans = row.data.answers[q.id] || '';
-    const prevMark = (row.data.shortAnswerMarksMap && row.data.shortAnswerMarksMap[q.id] != null)
-      ? row.data.shortAnswerMarksMap[q.id] : '';
-    html += `<div style="margin-bottom:14px;">
-      <p style="font-size:13px; font-weight:600; margin:0 0 4px;">${escapeHtml(q.question)} (${q.marks} marks)</p>
-      <p style="font-size:14px; background:var(--paper); padding:10px; border-radius:4px; white-space:pre-wrap;">${escapeHtml(ans) || '<em>no answer</em>'}</p>
-      <label style="margin:6px 0 2px;">Marks (out of ${q.marks})</label>
-      <input type="text" inputmode="decimal" data-qid="${q.id}" data-max="${q.marks}" class="sa-mark" value="${prevMark}" style="width:100px;">
-    </div>`;
-  });
-  document.getElementById('gradeBody').innerHTML = html;
-  document.getElementById('gradeOverlay').style.display = 'flex';
-}
-
-document.getElementById('gradeClose').addEventListener('click', () => {
-  document.getElementById('gradeOverlay').style.display = 'none';
-});
-
-document.getElementById('gradeSave').addEventListener('click', async () => {
-  if (!gradingRow) return;
-  const inputs = document.querySelectorAll('.sa-mark');
-  const marksMap = {};
-  let total = 0;
-  let allEntered = true;
-  inputs.forEach(inp => {
-    const max = parseFloat(inp.dataset.max);
-    let val = parseFloat(inp.value);
-    if (isNaN(val)) { allEntered = false; val = 0; }
-    if (val > max) val = max;
-    if (val < 0) val = 0;
-    marksMap[inp.dataset.qid] = val;
-    total += val;
-  });
-  await db.collection('results').doc(gradingRow.id).update({
-    shortAnswerMarksMap: marksMap,
-    shortAnswerMarks: total,
-    shortAnswerGraded: allEntered
-  });
-  document.getElementById('gradeOverlay').style.display = 'none';
-  await loadResults();
-});
+document.getElementById('refreshBtn').addEventListener('click', loadResults);
 
 document.getElementById('exportBtn').addEventListener('click', () => {
-  if (currentRows.length === 0) { alert('Load results first.'); return; }
-  const headers = ['Name', 'Roll', 'Class', 'Test', 'MCQ Score', 'MCQ Total', 'Short Answer', 'SA Total', 'Grand Total', 'Violations', 'Auto-submitted', 'Submitted At'];
-  const lines = [headers.join(',')];
-  currentRows.forEach(row => {
-    const d = row.data;
-    const saMax = row.testDef ? row.testDef.shortAnswer.reduce((s, q) => s + q.marks, 0) : '';
-    const submittedAt = d.submittedAt && d.submittedAt.toDate ? d.submittedAt.toDate().toISOString() : '';
-    const fields = [
-      d.name, d.roll, d.className, d.testTitle || d.testId,
-      d.mcqScore, d.mcqTotal,
-      d.shortAnswerGraded ? d.shortAnswerMarks : 'ungraded', saMax,
-      d.shortAnswerGraded ? (d.mcqScore + d.shortAnswerMarks) : '',
-      d.violations, d.autoSubmitted ? 'yes' : 'no', submittedAt
-    ];
-    lines.push(fields.map(f => `"${String(f).replace(/"/g, '""')}"`).join(','));
-  });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const header = ['Name','Roll','Class','Test','Score','Max','Flags','Submit reason','Submitted at'];
+  const rows = currentResults.map(r => [
+    r.name, r.roll, r.className, r.testTitle, r.score, r.maxScore, r.flags, r.submitReason,
+    r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate().toISOString() : ''
+  ]);
+  const csv = [header, ...rows]
+    .map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'results.csv';
+  a.download = `results-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 });
 </script>
