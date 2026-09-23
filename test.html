@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>Test in progress — Sports & Exercise Science</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,6 +48,12 @@
   .check-draw circle,.check-draw path{stroke-dasharray:1;stroke-dashoffset:1;animation:draw-check .6s ease forwards;}
   .check-draw path{animation-delay:.5s;}
   @keyframes draw-check{to{stroke-dashoffset:0;}}
+  .ios-notice{
+    position:fixed; top:0; left:0; right:0; z-index:99999;
+    background:#FFF3CD; color:#664D03; padding:12px 16px;
+    font-size:13.5px; text-align:center; border-bottom:1px solid #FFECB5;
+  }
+  .ios-notice b{font-weight:700;}
 </style>
 </head>
 <body>
@@ -126,6 +134,38 @@ const doneScreen = document.getElementById('doneScreen');
 const flagStat = document.getElementById('flagStat');
 const timeStat = document.getElementById('timeStat');
 
+/* ---------------- iOS fullscreen handling ---------------- */
+// iPhone Safari does not support the Fullscreen API at all (iPad does, from iPadOS 13+).
+// Calling requestFullscreen() there throws, which was showing as the red
+// "Full-screen was blocked by your browser" error. We detect it and skip
+// the API call there instead, while still starting the test normally.
+const isIOSPhone = /iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isIOSStandalone = window.navigator.standalone === true; // true if launched from "Add to Home Screen"
+
+function showIOSFullscreenNotice(){
+  if (document.querySelector('.ios-notice')) return;
+  const banner = document.createElement('div');
+  banner.className = 'ios-notice';
+  banner.innerHTML = 'iPhone does not support full-screen mode in Safari. For the closest experience, tap the Share icon and choose <b>"Add to Home Screen"</b>, then open the test from that icon.';
+  document.body.prepend(banner);
+}
+
+async function tryEnterFullscreen(){
+  // Returns true if we should proceed with the test, false if we should show an error and stop.
+  if (isIOSPhone) {
+    if (!isIOSStandalone) showIOSFullscreenNotice();
+    return true; // proceed without true fullscreen — it's not available on iPhone
+  }
+  try {
+    await document.documentElement.requestFullscreen();
+    return true;
+  } catch (e) {
+    gateErr.textContent = 'Full-screen was blocked by your browser. Allow full-screen and try again.';
+    gateErr.style.display = 'flex';
+    return false;
+  }
+}
+
 firebase.auth().onAuthStateChanged(user => {
   if (!user) { window.location.href = 'index.html'; return; }
   loadTest();
@@ -155,13 +195,9 @@ function showGateError(msg){
 }
 
 document.getElementById('beginBtn').addEventListener('click', async () => {
-  try {
-    await document.documentElement.requestFullscreen();
-  } catch (e) {
-    gateErr.textContent = 'Full-screen was blocked by your browser. Allow full-screen and try again.';
-    gateErr.style.display = 'flex';
-    return;
-  }
+  const ok = await tryEnterFullscreen();
+  if (!ok) return;
+
   started = true;
   gate.style.display = 'none';
   examWrap.style.display = 'block';
@@ -262,7 +298,8 @@ function attachProctoring(){
     if (document.hidden) raiseFlag('Tab switched or window minimized');
   });
   document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement && started && !submitted) raiseFlag('Exited full-screen');
+    // On iPhone this never fires since fullscreen is never entered, so it stays harmless there.
+    if (!document.fullscreenElement && started && !submitted && !isIOSPhone) raiseFlag('Exited full-screen');
   });
   window.addEventListener('blur', () => raiseFlag('Window lost focus'));
   document.addEventListener('contextmenu', e => { e.preventDefault(); raiseFlag('Right-click'); });
