@@ -89,8 +89,8 @@
     <h2>Teacher sign in</h2>
     <p class="sub">Restricted — students should not use this.</p>
     <div class="field">
-      <label for="teacherEmail">Email</label>
-      <input type="email" id="teacherEmail" placeholder="you@school.edu" autocomplete="off">
+      <label for="teacherEmail">Username</label>
+      <input type="text" id="teacherEmail" placeholder="Arpan@Sports" autocomplete="off">
     </div>
     <div class="field">
       <label for="teacherPassword">Password</label>
@@ -247,22 +247,31 @@ teacherSubmit.addEventListener('click', async () => {
     teacherErr.style.display = 'block';
     return;
   }
-  const email = teacherEmail.value.trim();
+  const username = teacherEmail.value.trim();
   const pw = teacherPassword.value;
-  if (!email || !pw) {
-    teacherErr.textContent = 'Enter both email and password.';
+
+  // Simple hardcoded check — change these two lines to update the login.
+  const TEACHER_USERNAME = "Arpan@Sports";
+  const TEACHER_PASSWORD = "Arpan@123";
+
+  if (username !== TEACHER_USERNAME || pw !== TEACHER_PASSWORD) {
+    teacherErr.textContent = 'Incorrect username or password.';
     teacherErr.style.display = 'block';
     return;
   }
+
   teacherSubmit.disabled = true;
   teacherSubmit.textContent = 'Signing in…';
   teacherErr.style.display = 'none';
   try {
-    if (firebase.auth().currentUser) await firebase.auth().signOut();
-    await firebase.auth().signInWithEmailAndPassword(email, pw);
+    // Still needs an anonymous Firebase session so Firestore reads/writes work.
+    if (!firebase.auth().currentUser) {
+      await firebase.auth().signInAnonymously();
+    }
+    sessionStorage.setItem('teacherAuthed', 'true');
     window.location.href = 'teacher.html';
   } catch (e) {
-    teacherErr.textContent = 'Sign-in failed. Check your email and password.';
+    teacherErr.textContent = 'Could not start a session: ' + e.message;
     teacherErr.style.display = 'block';
     teacherSubmit.disabled = false;
     teacherSubmit.textContent = 'Sign in';
