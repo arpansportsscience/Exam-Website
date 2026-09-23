@@ -6,30 +6,35 @@
 <title>Test in progress — Sports & Exercise Science</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 <style>
   .topbar{
     position:sticky; top:0; z-index:20;
     display:flex; justify-content:space-between; align-items:center;
-    padding:16px 24px; background:rgba(16,22,26,0.92); backdrop-filter:blur(6px);
-    border-bottom:1px solid rgba(255,255,255,0.08);
+    padding:16px 24px; background:rgba(19,42,61,0.94); backdrop-filter:blur(6px);
+    border-bottom:1px solid rgba(255,177,0,0.18);
   }
   .topbar .title{font-family:var(--font-display);font-weight:700;font-size:16px;}
-  .topbar .stats{display:flex;gap:20px;font-size:13px;color:#C8D0D4;}
-  .topbar .stats b{color:var(--go);font-family:var(--font-display);font-size:16px;}
+  .topbar .stats{display:flex;gap:20px;font-size:13px;color:#C3D2DA;}
+  .topbar .stats b{color:var(--amber);font-family:var(--font-display);font-size:16px;}
+  #timeStat{transition:color .2s ease;}
+  .time-warn{color:var(--danger) !important;}
+  .time-critical{color:var(--danger) !important;animation:pulse-beat 1s ease-in-out infinite;}
   .flagnum{color:var(--danger) !important;}
+  .progress-track{height:5px;background:rgba(255,255,255,0.08);}
+  .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--go),var(--amber));transition:width .3s ease;}
   main{max-width:760px;margin:0 auto;padding:32px 24px 100px;}
   .q{background:var(--chalk);color:var(--ink);border-radius:var(--radius);padding:24px;margin-bottom:18px;}
   .q .qhead{display:flex;justify-content:space-between;font-size:12.5px;color:#6B7478;margin-bottom:10px;font-weight:600;}
   .q .qtext{font-size:16px;font-weight:600;margin-bottom:16px;line-height:1.4;}
-  .opt{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1.5px solid #E4E0D2;border-radius:9px;margin-bottom:8px;cursor:pointer;}
-  .opt:hover{border-color:#B7B2A2;}
+  .opt{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1.5px solid #E4D9C4;border-radius:9px;margin-bottom:8px;cursor:pointer;}
+  .opt:hover{border-color:var(--go);}
   .opt input{width:auto;margin-top:3px;}
-  .opt.selected{border-color:var(--ink);background:#EFEADA;}
+  .opt.selected{border-color:var(--go);background:#FFEDE9;}
   #gate{max-width:560px;margin:80px auto;text-align:center;}
   #gate .card{text-align:left;}
-  #submitBar{position:sticky;bottom:0;background:rgba(16,22,26,0.95);backdrop-filter:blur(6px);padding:18px 24px;border-top:1px solid rgba(255,255,255,0.08);text-align:center;}
+  #submitBar{position:sticky;bottom:0;background:rgba(19,42,61,0.96);backdrop-filter:blur(6px);padding:18px 24px;border-top:1px solid rgba(255,177,0,0.18);text-align:center;}
   #submitBar .btn{max-width:320px;}
   .toast{
     position:fixed; top:70px; right:20px; z-index:60;
@@ -38,6 +43,9 @@
     max-width:300px;
   }
   #doneScreen{max-width:520px;margin:100px auto;text-align:center;}
+  .check-draw circle,.check-draw path{stroke-dasharray:1;stroke-dashoffset:1;animation:draw-check .6s ease forwards;}
+  .check-draw path{animation-delay:.5s;}
+  @keyframes draw-check{to{stroke-dashoffset:0;}}
 </style>
 </head>
 <body>
@@ -60,16 +68,32 @@
       <span>Time: <b id="timeStat">--:--</b></span>
     </div>
   </div>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
   <main id="questionsWrap"></main>
   <div id="submitBar">
     <button id="submitBtn" class="btn btn-primary btn-block" style="font-family:var(--font-display);font-size:17px;">Submit test</button>
   </div>
 </div>
 
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <h2>Submit test?</h2>
+    <p class="sub" id="confirmSummary"></p>
+    <div class="modal-actions">
+      <button id="confirmCancel" type="button" class="btn btn-outline">Keep working</button>
+      <button id="confirmSubmit" type="button" class="btn btn-primary">Submit now</button>
+    </div>
+  </div>
+</div>
+
 <div id="doneScreen" style="display:none;">
   <div class="card" style="text-align:center;">
+    <svg class="check-draw" viewBox="0 0 52 52" width="64" height="64" style="margin:0 auto 14px;display:block;">
+      <circle cx="26" cy="26" r="24" fill="none" stroke="var(--go)" stroke-width="3" pathLength="1"/>
+      <path fill="none" stroke="var(--go)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M14 27 l8 8 16-16" pathLength="1"/>
+    </svg>
     <h2>Test submitted</h2>
-    <p class="lede" style="margin:12px auto 0;">Your answers have been recorded. You can close this window now.</p>
+    <p class="lede" id="doneSummary" style="margin:12px auto 0;color:#4B5559;"></p>
   </div>
 </div>
 
@@ -89,6 +113,7 @@ const db = firebase.firestore();
 let test = null;
 let flagCount = 0;
 let timeLeftSec = 0;
+let totalTimeSec = 0;
 let timerHandle = null;
 let submitted = false;
 let started = false;
@@ -119,6 +144,7 @@ function loadTest(){
     document.getElementById('examTitle').textContent = test.title;
     document.getElementById('flagMax').textContent = test.maxViolations;
     timeLeftSec = test.durationMinutes * 60;
+    totalTimeSec = timeLeftSec;
     gate.style.display = 'block';
   }).catch(e => showGateError('Could not load the test (' + e.message + ').'));
 }
@@ -172,8 +198,18 @@ function renderQuestions(){
       group.forEach(g => g.classList.remove('selected'));
       optEl.classList.add('selected');
       optEl.querySelector('input').checked = true;
+      updateProgress();
     });
   });
+  questionsWrap.querySelectorAll('textarea').forEach(ta => ta.addEventListener('input', updateProgress));
+  updateProgress();
+}
+function updateProgress(){
+  const totalQ = (test.mcq || []).length + (test.shortAnswer || []).length;
+  if (totalQ === 0) return;
+  let answered = questionsWrap.querySelectorAll('input[type="radio"]:checked').length;
+  questionsWrap.querySelectorAll('textarea').forEach(ta => { if (ta.value.trim()) answered++; });
+  document.getElementById('progressFill').style.width = Math.round((answered / totalQ) * 100) + '%';
 }
 function escapeHtml(s){
   const d = document.createElement('div');
@@ -196,12 +232,18 @@ function updateTimeDisplay(){
   const m = Math.max(0, Math.floor(timeLeftSec / 60));
   const s = Math.max(0, timeLeftSec % 60);
   timeStat.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const frac = totalTimeSec ? timeLeftSec / totalTimeSec : 1;
+  timeStat.classList.remove('time-warn', 'time-critical');
+  if (frac <= 0.15) timeStat.classList.add('time-critical');
+  else if (frac <= 0.4) timeStat.classList.add('time-warn');
 }
 
 function raiseFlag(reason){
   if (submitted || !started) return;
   flagCount++;
   flagStat.textContent = flagCount;
+  flagStat.classList.add('pulse');
+  setTimeout(() => flagStat.classList.remove('pulse'), 500);
   showToast('Flag ' + flagCount + '/' + test.maxViolations + ': ' + reason);
   if (flagCount >= test.maxViolations) {
     submitTest(true, 'Flag limit reached');
@@ -239,7 +281,23 @@ function attachProctoring(){
   });
 }
 
-document.getElementById('submitBtn').addEventListener('click', () => submitTest(false, 'Manual submit'));
+document.getElementById('submitBtn').addEventListener('click', () => {
+  const totalQ = (test.mcq || []).length + (test.shortAnswer || []).length;
+  let answered = questionsWrap.querySelectorAll('input[type="radio"]:checked').length;
+  questionsWrap.querySelectorAll('textarea').forEach(ta => { if (ta.value.trim()) answered++; });
+  const unanswered = totalQ - answered;
+  document.getElementById('confirmSummary').textContent = unanswered > 0
+    ? `You've answered ${answered} of ${totalQ} questions. ${unanswered} will be left blank.`
+    : `You've answered all ${totalQ} questions.`;
+  document.getElementById('confirmModal').classList.add('open');
+});
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('open');
+});
+document.getElementById('confirmSubmit').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('open');
+  submitTest(false, 'Manual submit');
+});
 
 async function submitTest(auto, reason){
   if (submitted) return;
@@ -295,6 +353,9 @@ async function submitTest(auto, reason){
   sessionStorage.removeItem('examSession');
   if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch(e){} }
   examWrap.style.display = 'none';
+  document.getElementById('doneSummary').textContent = (test.shortAnswer || []).length > 0
+    ? `Auto-graded score: ${mcqScore}/${maxMcqScore} (multiple choice only). Your short answers will be graded by your teacher.`
+    : `Your score: ${mcqScore}/${maxMcqScore}. You can close this window now.`;
   doneScreen.style.display = 'block';
 }
 </script>

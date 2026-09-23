@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // EDIT THIS to your teacher email — must match assets/firebase-config.js
+    function isTeacher() {
+      return request.auth != null
+        && request.auth.token.email == "REPLACE_ME@example.com";
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Tests: any signed-in user (including anonymous students) can read
+    // them (needed so students can load their exam). Only the teacher
+    // can create, edit, open/close, or delete a test.
+    match /tests/{testId} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
+    }
+
+    // Results: a student can create exactly one result for themself
+    // (studentUid must match their own auth uid) and can never read,
+    // list, edit, or delete results — including their own — so nobody
+    // can see scores except the teacher. The teacher can read, update
+    // (grading), and delete.
+    match /results/{resultId} {
+      allow create: if isSignedIn()
+        && request.resource.data.studentUid == request.auth.uid;
+      allow read, update, delete: if isTeacher();
+    }
+  }
+}
