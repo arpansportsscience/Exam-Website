@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // NOTE: the teacher login is now a plain username/password check
+    // inside index.html's JavaScript, not real Firebase Authentication.
+    // Firestore rules have no way to check that — they can only see
+    // "is this request signed in at all" (which is true for every
+    // student too, since students sign in anonymously). So these
+    // rules can no longer tell a teacher apart from a student:
+    // anyone using the site can technically read/write tests and
+    // results directly, not just through the normal screens.
+    // Fine for a low-stakes classroom tool; not real access control.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /tests/{testId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /results/{resultId} {
+      allow create: if isSignedIn()
+        && request.resource.data.studentUid == request.auth.uid;
+      allow read, update, delete: if isSignedIn();
+    }
+  }
+}
