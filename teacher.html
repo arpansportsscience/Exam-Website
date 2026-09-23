@@ -91,7 +91,7 @@
       <div id="newTestOk" class="banner ok"></div>
       <button id="saveTestBtn" class="btn btn-primary btn-block" style="margin-top:22px;">Save test</button>
 
-      <details style="margin-top:22px;">
+      <details id="jsonImportDetails" style="margin-top:22px;">
         <summary style="cursor:pointer;font-size:13px;color:#4B5559;font-weight:600;">Or paste a test as JSON instead</summary>
         <p style="font-size:12.5px;color:#6B7478;margin:10px 0;">Shape: <code>{ id, className, title, durationMinutes, maxViolations, mcq: [{text, options:[], correctIndex, marks}], shortAnswer: [{text, marks}] }</code></p>
         <textarea id="jsonImport" rows="6" placeholder='{ "id": "...", ... }'></textarea>
@@ -307,19 +307,47 @@ function collectTestFromForm(){
   return { id, className, title, durationMinutes, maxViolations, mcq, shortAnswer, open: true };
 }
 
+/* Shared save routine used by both the manual builder and JSON import */
+async function saveTestToFirestore(t){
+  const { id, ...data } = t;
+  await db.collection('tests').doc(id).set(data);
+}
+
 document.getElementById('saveTestBtn').addEventListener('click', async () => {
   const errEl = document.getElementById('newTestErr');
   const okEl = document.getElementById('newTestOk');
   errEl.style.display = 'none'; okEl.style.display = 'none';
+
+  const jsonBox = document.getElementById('jsonImport');
+  const jsonText = jsonBox.value.trim();
+
   let t;
-  try { t = collectTestFromForm(); }
-  catch (e) { errEl.textContent = e.message; errEl.style.display = 'flex'; return; }
+  if (jsonText) {
+    // JSON textarea has content — use that instead of the manual builder fields.
+    let parsed;
+    try { parsed = JSON.parse(jsonText); }
+    catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'flex'; return; }
+    if (!parsed.id || !parsed.className || !parsed.title) {
+      errEl.textContent = 'JSON must include at least id, className and title.';
+      errEl.style.display = 'flex';
+      return;
+    }
+    parsed.open = parsed.open !== false;
+    parsed.mcq = parsed.mcq || [];
+    parsed.shortAnswer = parsed.shortAnswer || [];
+    parsed.durationMinutes = parsed.durationMinutes || 45;
+    parsed.maxViolations = parsed.maxViolations || 3;
+    t = parsed;
+  } else {
+    try { t = collectTestFromForm(); }
+    catch (e) { errEl.textContent = e.message; errEl.style.display = 'flex'; return; }
+  }
 
   try {
-    const { id, ...data } = t;
-    await db.collection('tests').doc(id).set(data);
+    await saveTestToFirestore(t);
     okEl.textContent = 'Saved "' + t.title + '". It is now open to students.';
     okEl.style.display = 'flex';
+    jsonBox.value = '';
     loadTestsTable(); loadResultsTestOptions();
   } catch (e) {
     errEl.textContent = 'Could not save: ' + e.message;
