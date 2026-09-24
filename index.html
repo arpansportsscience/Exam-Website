@@ -80,7 +80,7 @@
   </div>
 
   <footer class="note">
-    <a href="review.html">View a past result</a> &middot; <a id="teacherLink">Teacher access</a>
+    <a href="review.html">View a past result</a>
   </footer>
 </div>
 
@@ -250,7 +250,6 @@ startBtn.addEventListener('click', async () => {
 
 /* ---------------- Teacher access (password-gated) ---------------- */
 const teacherModal = document.getElementById('teacherModal');
-const teacherLink = document.getElementById('teacherLink');
 const teacherCancel = document.getElementById('teacherCancel');
 const teacherSubmit = document.getElementById('teacherSubmit');
 const teacherEmail = document.getElementById('teacherEmail');
@@ -266,7 +265,22 @@ function openTeacherModal(){
 }
 function closeTeacherModal(){ teacherModal.classList.remove('open'); }
 
-teacherLink.addEventListener('click', openTeacherModal);
+// Hidden trigger: click the clock 5 times within 2 seconds to open teacher sign-in.
+// There is no visible "Teacher access" link — students aren't meant to notice this.
+let clockClickCount = 0;
+let clockClickTimer = null;
+clockEl.style.cursor = 'default';
+clockEl.addEventListener('click', () => {
+  clockClickCount++;
+  clearTimeout(clockClickTimer);
+  clockClickTimer = setTimeout(() => { clockClickCount = 0; }, 2000);
+  if (clockClickCount >= 5) {
+    clockClickCount = 0;
+    clearTimeout(clockClickTimer);
+    openTeacherModal();
+  }
+});
+
 teacherCancel.addEventListener('click', closeTeacherModal);
 teacherModal.addEventListener('click', (e) => { if (e.target === teacherModal) closeTeacherModal(); });
 teacherPassword.addEventListener('keydown', (e) => { if (e.key === 'Enter') teacherSubmit.click(); });
