@@ -44,8 +44,7 @@
     font-size:13.5px; font-weight:600; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5);
     max-width:300px;
   }
-  #doneScreen{max-width:520px;margin:60px auto 100px;text-align:center;padding:0 24px;}
-  #doneScreen.wide{max-width:760px;}
+  #doneScreen{max-width:520px;margin:100px auto;text-align:center;}
   .check-draw circle,.check-draw path{stroke-dasharray:1;stroke-dashoffset:1;animation:draw-check .6s ease forwards;}
   .check-draw path{animation-delay:.5s;}
   @keyframes draw-check{to{stroke-dashoffset:0;}}
@@ -55,23 +54,6 @@
     font-size:13.5px; text-align:center; border-bottom:1px solid #FFECB5;
   }
   .ios-notice b{font-weight:700;}
-
-  /* ---- response sheet / review ---- */
-  .review-title{font-family:var(--font-display);font-size:22px;margin:36px 0 16px;text-align:left;}
-  .review-q{background:var(--chalk);color:var(--ink);border-radius:var(--radius);padding:22px;margin-bottom:16px;text-align:left;}
-  .review-q .rqhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:#6B7478;margin-bottom:10px;font-weight:600;flex-wrap:wrap;gap:6px;}
-  .review-q .rqtext{font-size:15.5px;font-weight:600;margin-bottom:14px;line-height:1.4;}
-  .review-opt{padding:10px 12px;border:1.5px solid #E4D9C4;border-radius:9px;margin-bottom:7px;font-size:14px;}
-  .review-opt.correct{border-color:var(--go);background:#E8F8EE;font-weight:600;}
-  .review-opt.wrong-selected{border-color:var(--danger);background:#FDEAEA;}
-  .review-note{font-size:11.5px;font-weight:700;margin-left:6px;}
-  .review-note.correct{color:#1E7A46;}
-  .review-note.wrong{color:#B3261E;}
-  .review-tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
-  .review-tag.correct{background:#E8F8EE;color:#1E7A46;}
-  .review-tag.wrong{background:#FDEAEA;color:#B3261E;}
-  .review-tag.pending{background:#FFF3CD;color:#664D03;}
-  .review-sa-answer{font-size:13.5px;background:#FFF6E4;padding:12px;border-radius:8px;white-space:pre-wrap;border:1px solid #EDE2C8;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -121,7 +103,6 @@
     <h2>Test submitted</h2>
     <p class="lede" id="doneSummary" style="margin:12px auto 0;color:#4B5559;"></p>
   </div>
-  <div id="reviewWrap"></div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -355,57 +336,6 @@ document.getElementById('confirmSubmit').addEventListener('click', () => {
   submitTest(false, 'Manual submit');
 });
 
-/* ---------------- Response sheet / review ---------------- */
-function renderReview(mcqAnswers, shortAnswers){
-  const hasMcq = (test.mcq || []).length > 0;
-  const hasSa = (test.shortAnswer || []).length > 0;
-  if (!hasMcq && !hasSa) { document.getElementById('reviewWrap').innerHTML = ''; return; }
-
-  let html = '<div class="review-title">Your responses</div>';
-
-  (test.mcq || []).forEach((q, qi) => {
-    const sel = mcqAnswers[qi];
-    const isCorrect = sel !== null && sel === q.correctIndex;
-    html += `<div class="review-q">
-      <div class="rqhead">
-        <span>MCQ ${qi+1}</span>
-        <span>
-          ${isCorrect ? q.marks : 0}/${q.marks} mark${q.marks==1?'':'s'}
-          <span class="review-tag ${isCorrect ? 'correct' : 'wrong'}">${isCorrect ? 'Correct' : 'Incorrect'}</span>
-        </span>
-      </div>
-      <div class="rqtext">${escapeHtml(q.text)}</div>
-      ${q.options.map((opt, oi) => {
-        let cls = 'review-opt';
-        let note = '';
-        if (oi === q.correctIndex && oi === sel) { cls += ' correct'; note = '<span class="review-note correct">Your answer — correct</span>'; }
-        else if (oi === q.correctIndex) { cls += ' correct'; note = '<span class="review-note correct">Correct answer</span>'; }
-        else if (oi === sel) { cls += ' wrong-selected'; note = '<span class="review-note wrong">Your answer</span>'; }
-        return `<div class="${cls}">${escapeHtml(opt)} ${note}</div>`;
-      }).join('')}
-      ${sel === null ? '<p style="font-size:12.5px;color:#6B7478;margin-top:6px;"><i>You did not answer this question.</i></p>' : ''}
-    </div>`;
-  });
-
-  (test.shortAnswer || []).forEach((q, qi) => {
-    const a = shortAnswers[qi] || { text: '', marks: null };
-    html += `<div class="review-q">
-      <div class="rqhead">
-        <span>Short answer ${qi+1}</span>
-        <span>
-          ${q.marks} mark${q.marks==1?'':'s'}
-          <span class="review-tag pending">Pending grading</span>
-        </span>
-      </div>
-      <div class="rqtext">${escapeHtml(q.text)}</div>
-      <div class="review-sa-answer">${escapeHtml(a.text) || '<i>No answer given</i>'}</div>
-    </div>`;
-  });
-
-  document.getElementById('reviewWrap').innerHTML = html;
-  doneScreen.classList.add('wide');
-}
-
 async function submitTest(auto, reason){
   if (submitted) return;
   submitted = true;
@@ -460,11 +390,11 @@ async function submitTest(auto, reason){
   sessionStorage.removeItem('examSession');
   if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch(e){} }
   examWrap.style.display = 'none';
-  document.getElementById('doneSummary').textContent = (test.shortAnswer || []).length > 0
-    ? `Auto-graded score: ${mcqScore}/${maxMcqScore} (multiple choice only). Your short answers will be graded by your teacher. Your full response sheet is below.`
-    : `Your score: ${mcqScore}/${maxMcqScore}. Your full response sheet is below.`;
+  document.getElementById('doneSummary').innerHTML = ((test.shortAnswer || []).length > 0
+    ? `Auto-graded score: ${mcqScore}/${maxMcqScore} (multiple choice only). Your short answers will be graded by your teacher.`
+    : `Your score: ${mcqScore}/${maxMcqScore}.`) +
+    ` You can view your full response sheet anytime on <a href="review.html">the results page</a>.`;
 
-  renderReview(mcqAnswers, shortAnswers);
   doneScreen.style.display = 'block';
 }
 </script>
