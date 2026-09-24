@@ -214,7 +214,23 @@ viewBtn.addEventListener('click', async () => {
       const tb = b.submittedAt && b.submittedAt.toMillis ? b.submittedAt.toMillis() : 0;
       return tb - ta;
     });
-    renderResult(test, matches[0]);
+    const result = matches[0];
+    const alreadyReviewed = result.reviewed === true;
+    renderResult(test, result, alreadyReviewed);
+
+    // Mark this result as reviewed the first time the full breakdown is shown,
+    // so a second visit only shows the score, not the answer breakdown.
+    if (!alreadyReviewed) {
+      try {
+        await db.collection('results').doc(result.id).update({
+          reviewed: true,
+          reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {
+        console.error('could not mark result as reviewed:', e);
+        // Non-fatal — the student still sees their result this time either way.
+      }
+    }
   } catch (e) {
     console.error('lookup failed:', e);
     showErr('Could not look up your result (' + e.message + ').');
@@ -224,7 +240,7 @@ viewBtn.addEventListener('click', async () => {
   }
 });
 
-function renderResult(test, result){
+function renderResult(test, result, alreadyReviewed){
   const saGraded = result.graded;
   const saTotal = (result.shortAnswers || []).reduce((sum, a) => sum + (a.marks || 0), 0);
   const totalScore = result.totalScore != null ? result.totalScore : (result.mcqScore + (saGraded ? saTotal : 0));
@@ -241,6 +257,18 @@ function renderResult(test, result){
       </div>
     </div>
   `;
+
+  if (alreadyReviewed) {
+    document.getElementById('reviewWrap').innerHTML = `
+      <div class="review-q" style="text-align:center;">
+        <p style="font-size:13.5px;color:#6B7478;margin:0;">
+          You've already viewed your detailed response sheet once — it can only be checked one time.
+          If you need to see it again, ask your teacher.
+        </p>
+      </div>
+    `;
+    return;
+  }
 
   let html = '<div class="review-title">Your responses</div>';
 
