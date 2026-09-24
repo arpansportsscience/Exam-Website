@@ -215,6 +215,19 @@ viewBtn.addEventListener('click', async () => {
       return tb - ta;
     });
     const result = matches[0];
+
+    // Results are only available to students who attempted at least 60% of
+    // the test's total allotted time. Older results saved before this rule
+    // existed have no timeSpentSec on record — treat those as eligible
+    // rather than locking out results that predate this feature.
+    const totalSec = test.durationMinutes * 60;
+    const requiredSec = totalSec * 0.6;
+    const spentSec = (typeof result.timeSpentSec === 'number') ? result.timeSpentSec : totalSec;
+    if (spentSec < requiredSec) {
+      showErr('Your result is not available because you attempted less than 60% of the allotted test time. If you think this is a mistake, contact your teacher.');
+      return;
+    }
+
     const alreadyReviewed = result.reviewed === true;
     renderResult(test, result, alreadyReviewed);
 
