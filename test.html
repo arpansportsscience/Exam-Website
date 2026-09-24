@@ -357,6 +357,8 @@ async function submitTest(auto, reason){
     shortAnswers.push({ text: ta ? ta.value.trim() : '', marks: null });
   });
 
+  const timeSpentSec = Math.max(0, totalTimeSec - Math.max(timeLeftSec, 0));
+
   const result = {
     studentUid: firebase.auth().currentUser.uid,
     name: session.name,
@@ -375,6 +377,8 @@ async function submitTest(auto, reason){
     graded: (test.shortAnswer || []).length === 0,
     shortAnswerTotal: 0,
     totalScore: mcqScore,
+    timeSpentSec,
+    totalTimeSec,
     submittedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
