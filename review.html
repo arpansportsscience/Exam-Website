@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>View your result — Sports & Exercise Science</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  main.review-main{max-width:760px;margin:0 auto;padding:0 24px 100px;}
+  #resultSummary{margin-top:28px;}
+  .review-title{font-family:var(--font-display);font-size:22px;margin:36px 0 16px;text-align:left;}
+  .review-q{background:var(--chalk);color:var(--ink);border-radius:var(--radius);padding:22px;margin-bottom:16px;text-align:left;}
+  .review-q .rqhead{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:#6B7478;margin-bottom:10px;font-weight:600;flex-wrap:wrap;gap:6px;}
+  .review-q .rqtext{font-size:15.5px;font-weight:600;margin-bottom:14px;line-height:1.4;}
+  .review-opt{padding:10px 12px;border:1.5px solid #E4D9C4;border-radius:9px;margin-bottom:7px;font-size:14px;}
+  .review-opt.correct{border-color:var(--go);background:#E8F8EE;font-weight:600;}
+  .review-opt.wrong-selected{border-color:var(--danger);background:#FDEAEA;}
+  .review-note{font-size:11.5px;font-weight:700;margin-left:6px;}
+  .review-note.correct{color:#1E7A46;}
+  .review-note.wrong{color:#B3261E;}
+  .review-tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .review-tag.correct{background:#E8F8EE;color:#1E7A46;}
+  .review-tag.wrong{background:#FDEAEA;color:#B3261E;}
+  .review-tag.pending{background:#FFF3CD;color:#664D03;}
+  .review-tag.graded{background:#E4EEFF;color:#1E4E9E;}
+  .review-sa-answer{font-size:13.5px;background:#FFF6E4;padding:12px;border-radius:8px;white-space:pre-wrap;border:1px solid #EDE2C8;margin-top:4px;}
+  .score-card{background:var(--chalk);color:var(--ink);border-radius:var(--radius);padding:22px;text-align:center;}
+  .score-card .big{font-family:var(--font-display);font-size:40px;color:var(--go);}
+  .score-card .sub{font-size:13.5px;color:#6B7478;margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow-row">
+    <span class="dept">Sports &amp; Exercise Science</span>
+  </div>
+  <h1 style="font-size:clamp(32px,7vw,52px);line-height:1.0;letter-spacing:-0.01em;margin-bottom:14px;">View your result</h1>
+  <p class="lede">Enter your roll number and select your class and test to see your response sheet.</p>
+
+  <div class="card card-accent">
+    <div class="field">
+      <label for="roll">Roll number / Student ID</label>
+      <input type="text" id="roll" placeholder="e.g. SES-2024-014" autocomplete="off">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="className">Class</label>
+        <select id="className" disabled>
+          <option value="">Loading…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="testSelect">Test</label>
+        <select id="testSelect" disabled>
+          <option value="">Select your class first</option>
+        </select>
+      </div>
+    </div>
+    <div id="err" class="banner error"></div>
+    <button id="viewBtn" class="btn btn-primary btn-block" disabled style="margin-top:20px;font-family:var(--font-display);font-size:18px;">View my result</button>
+  </div>
+
+  <footer class="note">
+    <a href="index.html">Back to start a test</a>
+  </footer>
+</div>
+
+<main class="review-main">
+  <div id="resultSummary"></div>
+  <div id="reviewWrap"></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const classNameEl = document.getElementById('className');
+const testSelect = document.getElementById('testSelect');
+const viewBtn = document.getElementById('viewBtn');
+const errEl = document.getElementById('err');
+const rollEl = document.getElementById('roll');
+let allTests = [];
+let testsLoaded = false;
+let firebaseReady = false;
+let db;
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  firebaseReady = true;
+} catch (e) {
+  console.error('firebase init failed:', e);
+  showErr('Could not connect to the test service. Please tell your teacher.');
+}
+
+function showErr(msg){ errEl.textContent = msg; errEl.style.display = 'flex'; }
+function clearErr(){ errEl.style.display = 'none'; }
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+function normalizeClass(v){ return String(v ?? '').trim().toLowerCase(); }
+function normalizeRoll(v){ return String(v ?? '').trim().toLowerCase(); }
+
+function loadTests(){
+  if (!firebaseReady) return;
+  firebase.auth().signInAnonymously()
+    .then(() => db.collection('tests').get()) // all tests, not just open ones — a test may have closed since the student took it
+    .then(snap => {
+      allTests = [];
+      snap.forEach(doc => allTests.push({ id: doc.id, ...doc.data() }));
+      testsLoaded = true;
+      const classes = [...new Set(allTests.map(t => t.className).filter(Boolean))];
+      if (classes.length === 0) {
+        classNameEl.innerHTML = '<option value="">No tests found</option>';
+        return;
+      }
+      classNameEl.innerHTML = '<option value="">Select your class</option>' +
+        classes.map(c => `<option value="${c}">${c}</option>`).join('');
+      classNameEl.disabled = false;
+      validate();
+    })
+    .catch(e => {
+      console.error('tests load failed:', e);
+      showErr('Could not load the list of tests (' + e.message + ').');
+    });
+}
+loadTests();
+
+classNameEl.addEventListener('change', () => {
+  const cls = classNameEl.value;
+  testSelect.innerHTML = '';
+  if (!cls) {
+    testSelect.disabled = true;
+    testSelect.innerHTML = '<option value="">Select your class first</option>';
+    validate();
+    return;
+  }
+  const clsNorm = normalizeClass(cls);
+  const matches = allTests.filter(t => normalizeClass(t.className) === clsNorm);
+  if (matches.length === 0) {
+    testSelect.disabled = true;
+    testSelect.innerHTML = '<option value="">No tests found for your class</option>';
+  } else {
+    testSelect.disabled = false;
+    testSelect.innerHTML = '<option value="">Select a test</option>' +
+      matches.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+  }
+  validate();
+});
+
+[rollEl, testSelect].forEach(el => el.addEventListener('input', validate));
+
+function validate(){
+  const ok = testsLoaded && firebaseReady &&
+             rollEl.value.trim().length > 0 &&
+             classNameEl.value && testSelect.value;
+  viewBtn.disabled = !ok;
+}
+
+viewBtn.addEventListener('click', async () => {
+  clearErr();
+  document.getElementById('resultSummary').innerHTML = '';
+  document.getElementById('reviewWrap').innerHTML = '';
+  viewBtn.disabled = true;
+  viewBtn.textContent = 'Looking up…';
+
+  const testId = testSelect.value;
+  const rollTyped = normalizeRoll(rollEl.value);
+  const test = allTests.find(t => t.id === testId);
+
+  try {
+    const snap = await db.collection('results').where('testId', '==', testId).get();
+    const matches = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (normalizeRoll(d.roll) === rollTyped) matches.push({ id: doc.id, ...d });
+    });
+
+    if (matches.length === 0) {
+      showErr('No submission found for that roll number on this test. Double-check your roll number and test selection.');
+      return;
+    }
+    // If a student was allowed multiple attempts, show the most recent.
+    matches.sort((a, b) => {
+      const ta = a.submittedAt && a.submittedAt.toMillis ? a.submittedAt.toMillis() : 0;
+      const tb = b.submittedAt && b.submittedAt.toMillis ? b.submittedAt.toMillis() : 0;
+      return tb - ta;
+    });
+    renderResult(test, matches[0]);
+  } catch (e) {
+    console.error('lookup failed:', e);
+    showErr('Could not look up your result (' + e.message + ').');
+  } finally {
+    viewBtn.disabled = false;
+    viewBtn.textContent = 'View my result';
+  }
+});
+
+function renderResult(test, result){
+  const saGraded = result.graded;
+  const saTotal = (result.shortAnswers || []).reduce((sum, a) => sum + (a.marks || 0), 0);
+  const totalScore = result.totalScore != null ? result.totalScore : (result.mcqScore + (saGraded ? saTotal : 0));
+  const maxTotal = result.maxMcqScore + (test.shortAnswer || []).reduce((s, q) => s + q.marks, 0);
+
+  document.getElementById('resultSummary').innerHTML = `
+    <div class="score-card">
+      <div>${escapeHtml(result.name)} — ${escapeHtml(result.roll)}</div>
+      <div class="big">${totalScore}/${maxTotal}</div>
+      <div class="sub">
+        MCQ: ${result.mcqScore}/${result.maxMcqScore}
+        ${ (test.shortAnswer||[]).length ? ' &middot; Short answer: ' + (saGraded ? saTotal + '/' + (test.shortAnswer||[]).reduce((s,q)=>s+q.marks,0) : 'pending grading') : '' }
+        &middot; Flags: ${result.flagCount}${result.autoSubmitted ? ' (auto-submitted)' : ''}
+      </div>
+    </div>
+  `;
+
+  let html = '<div class="review-title">Your responses</div>';
+
+  (test.mcq || []).forEach((q, qi) => {
+    const sel = (result.mcqAnswers || [])[qi];
+    const isCorrect = sel !== null && sel !== undefined && sel === q.correctIndex;
+    html += `<div class="review-q">
+      <div class="rqhead">
+        <span>MCQ ${qi+1}</span>
+        <span>
+          ${isCorrect ? q.marks : 0}/${q.marks} mark${q.marks==1?'':'s'}
+          <span class="review-tag ${isCorrect ? 'correct' : 'wrong'}">${isCorrect ? 'Correct' : 'Incorrect'}</span>
+        </span>
+      </div>
+      <div class="rqtext">${escapeHtml(q.text)}</div>
+      ${q.options.map((opt, oi) => {
+        let cls = 'review-opt';
+        let note = '';
+        if (oi === q.correctIndex && oi === sel) { cls += ' correct'; note = '<span class="review-note correct">Your answer — correct</span>'; }
+        else if (oi === q.correctIndex) { cls += ' correct'; note = '<span class="review-note correct">Correct answer</span>'; }
+        else if (oi === sel) { cls += ' wrong-selected'; note = '<span class="review-note wrong">Your answer</span>'; }
+        return `<div class="${cls}">${escapeHtml(opt)} ${note}</div>`;
+      }).join('')}
+      ${(sel === null || sel === undefined) ? '<p style="font-size:12.5px;color:#6B7478;margin-top:6px;"><i>You did not answer this question.</i></p>' : ''}
+    </div>`;
+  });
+
+  (test.shortAnswer || []).forEach((q, qi) => {
+    const a = (result.shortAnswers || [])[qi] || { text: '', marks: null };
+    const graded = a.marks !== null && a.marks !== undefined;
+    html += `<div class="review-q">
+      <div class="rqhead">
+        <span>Short answer ${qi+1}</span>
+        <span>
+          ${graded ? a.marks : q.marks} mark${q.marks==1?'':'s'}
+          <span class="review-tag ${graded ? 'graded' : 'pending'}">${graded ? ('Score: ' + a.marks + '/' + q.marks) : 'Pending grading'}</span>
+        </span>
+      </div>
+      <div class="rqtext">${escapeHtml(q.text)}</div>
+      <div class="review-sa-answer">${escapeHtml(a.text) || '<i>No answer given</i>'}</div>
+    </div>`;
+  });
+
+  document.getElementById('reviewWrap').innerHTML = html;
+}
+</script>
+</body>
+</html>
