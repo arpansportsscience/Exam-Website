@@ -206,11 +206,41 @@ document.getElementById('beginBtn').addEventListener('click', async () => {
   attachProctoring();
 });
 
+/* ---------------- Per-student question shuffling ----------------
+   The visual order is shuffled per student; grading still keys off each
+   question's ORIGINAL index (qi), via the same name="mcq${qi}" / data-sa="${qi}"
+   attributes as before — so submitTest() needs no changes at all. The shuffle
+   is seeded from the student's roll + test id, so reloading mid-test keeps
+   the same order instead of re-shuffling every time. */
+function makeSeededRandom(seedStr){
+  let seed = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    seed = (seed * 31 + seedStr.charCodeAt(i)) >>> 0;
+  }
+  return function(){
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+function seededShuffleIndices(length, rng){
+  const arr = Array.from({ length }, (_, i) => i);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function renderQuestions(){
+  const rng = makeSeededRandom(session.roll + '::' + test.id);
+  const mcqOrder = seededShuffleIndices((test.mcq || []).length, rng);
+  const saOrder = seededShuffleIndices((test.shortAnswer || []).length, rng);
+
   let html = '';
-  (test.mcq || []).forEach((q, qi) => {
+  mcqOrder.forEach((qi, displayIndex) => {
+    const q = test.mcq[qi];
     html += `<div class="q" data-type="mcq" data-qi="${qi}">
-      <div class="qhead"><span>MCQ ${qi+1}</span><span>${q.marks} mark${q.marks==1?'':'s'}</span></div>
+      <div class="qhead"><span>MCQ ${displayIndex+1}</span><span>${q.marks} mark${q.marks==1?'':'s'}</span></div>
       <div class="qtext">${escapeHtml(q.text)}</div>
       ${q.options.map((opt, oi) => `
         <label class="opt" data-oi="${oi}">
@@ -219,9 +249,10 @@ function renderQuestions(){
         </label>`).join('')}
     </div>`;
   });
-  (test.shortAnswer || []).forEach((q, qi) => {
+  saOrder.forEach((qi, displayIndex) => {
+    const q = test.shortAnswer[qi];
     html += `<div class="q" data-type="sa" data-qi="${qi}">
-      <div class="qhead"><span>Short answer ${qi+1}</span><span>${q.marks} mark${q.marks==1?'':'s'}</span></div>
+      <div class="qhead"><span>Short answer ${displayIndex+1}</span><span>${q.marks} mark${q.marks==1?'':'s'}</span></div>
       <div class="qtext">${escapeHtml(q.text)}</div>
       <textarea data-sa="${qi}" placeholder="Type your answer…"></textarea>
     </div>`;
