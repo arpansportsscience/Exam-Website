@@ -146,6 +146,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -202,6 +203,7 @@ function loadTestsTable(){
         <td>${t.durationMinutes} min</td>
         <td>
           <button class="btn btn-outline btn-sm toggle-open" data-id="${doc.id}" data-open="${t.open}">${t.open ? 'Close' : 'Open'}</button>
+          <button class="btn btn-outline btn-sm answer-key-btn" data-id="${doc.id}">Answer key (PDF)</button>
           <button class="btn btn-danger btn-sm del-test" data-id="${doc.id}">Delete</button>
         </td>
       </tr>`;
@@ -211,6 +213,7 @@ function loadTestsTable(){
       await db.collection('tests').doc(b.dataset.id).update({ open: !(b.dataset.open === 'true') });
       loadTestsTable(); loadResultsTestOptions();
     }));
+    body.querySelectorAll('.answer-key-btn').forEach(b => b.addEventListener('click', () => downloadAnswerKeyPdf(b.dataset.id)));
     body.querySelectorAll('.del-test').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Delete this test? Existing results are kept.')) return;
       await db.collection('tests').doc(b.dataset.id).delete();
@@ -219,6 +222,80 @@ function loadTestsTable(){
   });
 }
 function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+/* ---------------- Answer key PDF (teacher-only — this page is already password-gated) ---------------- */
+async function downloadAnswerKeyPdf(testId){
+  const btn = document.querySelector(`.answer-key-btn[data-id="${testId}"]`);
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+  try {
+    const doc = await db.collection('tests').doc(testId).get();
+    if (!doc.exists) { alert('That test could not be found.'); return; }
+    buildAnswerKeyPdf(testId, doc.data());
+  } catch (e) {
+    console.error('answer key pdf failed:', e);
+    alert('Could not build the answer key PDF: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+function sanitizeFilename(s){
+  return String(s || 'test').replace(/[^a-z0-9\-_. ]/gi, '').trim().replace(/\s+/g, '-') || 'test';
+}
+
+function buildAnswerKeyPdf(testId, t){
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  const marginX = 44;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const maxWidth = pageWidth - marginX * 2;
+  let y = 56;
+
+  function ensureSpace(neededHeight){
+    if (y + neededHeight > pageHeight - 44) { pdf.addPage(); y = 56; }
+  }
+  function addText(text, size, bold, color){
+    pdf.setFontSize(size);
+    pdf.setFont(undefined, bold ? 'bold' : 'normal');
+    if (color) pdf.setTextColor(color[0], color[1], color[2]); else pdf.setTextColor(20, 20, 20);
+    const lines = pdf.splitTextToSize(String(text), maxWidth);
+    const lineHeight = size * 1.35;
+    ensureSpace(lines.length * lineHeight);
+    pdf.text(lines, marginX, y);
+    y += lines.length * lineHeight;
+  }
+
+  addText(t.title || testId, 18, true);
+  addText(`${t.className || ''}  ·  ${t.durationMinutes || '?'} min  ·  Max flags: ${t.maxViolations || '?'}`, 10.5, false, [90, 90, 90]);
+  addText('TEACHER COPY — ANSWER KEY. Do not distribute this file to students.', 10, true, [180, 40, 30]);
+  y += 12;
+
+  (t.mcq || []).forEach((q, qi) => {
+    ensureSpace(24);
+    addText(`${qi + 1}. ${q.text}  (${q.marks} mark${q.marks == 1 ? '' : 's'})`, 12, true);
+    (q.options || []).forEach((opt, oi) => {
+      const letter = String.fromCharCode(65 + oi);
+      const isCorrect = oi === q.correctIndex;
+      addText(`${isCorrect ? '✔' : ' '}  ${letter}. ${opt}${isCorrect ? '   ← correct answer' : ''}`, 10.5, isCorrect, isCorrect ? [20, 120, 60] : [40, 40, 40]);
+    });
+    y += 10;
+  });
+
+  if ((t.shortAnswer || []).length > 0) {
+    ensureSpace(20);
+    addText('Short-answer questions (manually graded — no fixed answer key)', 12, true);
+    y += 4;
+    (t.shortAnswer || []).forEach((q, qi) => {
+      ensureSpace(20);
+      addText(`${qi + 1}. ${q.text}  (${q.marks} mark${q.marks == 1 ? '' : 's'})`, 11, false);
+      y += 6;
+    });
+  }
+
+  pdf.save(sanitizeFilename(t.title) + '-answer-key.pdf');
+}
 
 function renderResultsStats(){
   const total = loadedResults.length;
