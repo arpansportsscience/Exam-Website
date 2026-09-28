@@ -121,8 +121,8 @@
       </div>
       <div class="stat-row" id="resultsStats"></div>
       <table id="resultsTable">
-        <thead><tr><th>Name</th><th>Roll</th><th>MCQ</th><th>Short-ans</th><th>Total</th><th>Flags</th><th>Status</th><th></th></tr></thead>
-        <tbody id="resultsBody"><tr><td colspan="8">Select a test and click Load results.</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Roll</th><th>MCQ</th><th>Short-ans</th><th>Total</th><th>Flags</th><th>Submitted</th><th>Time taken</th><th>Status</th><th></th></tr></thead>
+        <tbody id="resultsBody"><tr><td colspan="10">Select a test and click Load results.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -476,8 +476,8 @@ function loadResultsTestOptions(){
 document.getElementById('loadResultsBtn').addEventListener('click', async () => {
   const testId = document.getElementById('resultsTestSelect').value;
   const body = document.getElementById('resultsBody');
-  if (!testId) { body.innerHTML = '<tr><td colspan="8">Select a test first.</td></tr>'; return; }
-  body.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
+  if (!testId) { body.innerHTML = '<tr><td colspan="10">Select a test first.</td></tr>'; return; }
+  body.innerHTML = '<tr><td colspan="10">Loading…</td></tr>';
 
   const testDoc = await db.collection('tests').doc(testId).get();
   currentTestForResults = { id: testDoc.id, ...testDoc.data() };
@@ -489,10 +489,23 @@ document.getElementById('loadResultsBtn').addEventListener('click', async () => 
   renderResultsTable();
 });
 
+function formatSubmittedAt(ts){
+  if (!ts || !ts.toDate) return '—';
+  const d = ts.toDate();
+  return d.toLocaleDateString([], { day: '2-digit', month: 'short' }) + ' ' +
+         d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function formatTimeTaken(r){
+  if (typeof r.timeSpentSec !== 'number') return '—';
+  const m = Math.floor(r.timeSpentSec / 60);
+  const s = r.timeSpentSec % 60;
+  return `${m}m ${String(s).padStart(2,'0')}s`;
+}
+
 function renderResultsTable(){
   renderResultsStats();
   const body = document.getElementById('resultsBody');
-  if (loadedResults.length === 0) { body.innerHTML = '<tr><td colspan="8">No submissions yet for this test.</td></tr>'; return; }
+  if (loadedResults.length === 0) { body.innerHTML = '<tr><td colspan="10">No submissions yet for this test.</td></tr>'; return; }
   let html = '';
   loadedResults.forEach(r => {
     const saTotal = (r.shortAnswer && r.shortAnswer.length) ?
@@ -505,6 +518,8 @@ function renderResultsTable(){
       <td>${saTotal}</td>
       <td><b>${r.totalScore}</b></td>
       <td>${r.flagCount}${r.autoSubmitted ? ' (auto)' : ''}</td>
+      <td>${formatSubmittedAt(r.submittedAt)}</td>
+      <td>${formatTimeTaken(r)}</td>
       <td><span class="pill ${r.graded ? 'pill-graded' : 'pill-pending'}">${r.graded ? 'Graded' : 'Needs grading'}</span></td>
       <td>${(currentTestForResults.shortAnswer||[]).length > 0 ? `<button class="btn btn-outline btn-sm grade-btn" data-id="${r.id}">Grade</button>` : ''}</td>
     </tr>`;
@@ -515,10 +530,10 @@ function renderResultsTable(){
 
 document.getElementById('exportCsvBtn').addEventListener('click', () => {
   if (loadedResults.length === 0) { alert('Load results first.'); return; }
-  const rows = [['Name','Roll','Class','Test','MCQ Score','MCQ Max','Short-Answer Total','Total Score','Flags','Auto-submitted','Graded']];
+  const rows = [['Name','Roll','Class','Test','MCQ Score','MCQ Max','Short-Answer Total','Total Score','Flags','Submitted At','Time Taken','Auto-submitted','Graded']];
   loadedResults.forEach(r => {
     const saTotal = (r.shortAnswers || []).reduce((sum, a) => sum + (a.marks || 0), 0);
-    rows.push([r.name, r.roll, r.className, r.testTitle, r.mcqScore, r.maxMcqScore, saTotal, r.totalScore, r.flagCount, r.autoSubmitted ? 'Yes' : 'No', r.graded ? 'Yes' : 'No']);
+    rows.push([r.name, r.roll, r.className, r.testTitle, r.mcqScore, r.maxMcqScore, saTotal, r.totalScore, r.flagCount, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.autoSubmitted ? 'Yes' : 'No', r.graded ? 'Yes' : 'No']);
   });
   const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
