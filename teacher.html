@@ -486,6 +486,10 @@ document.getElementById('loadResultsBtn').addEventListener('click', async () => 
   loadedResults = [];
   snap.forEach(doc => loadedResults.push({ id: doc.id, ...doc.data() }));
 
+  // Ascending by roll number — numeric-aware, so "9" sorts before "10" and
+  // mixed formats like "SES-2024-014" still compare sensibly.
+  loadedResults.sort((a, b) => String(a.roll ?? '').localeCompare(String(b.roll ?? ''), undefined, { numeric: true, sensitivity: 'base' }));
+
   renderResultsTable();
 });
 
