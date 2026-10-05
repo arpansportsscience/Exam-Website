@@ -254,10 +254,17 @@ viewBtn.addEventListener('click', async () => {
 });
 
 function renderResult(test, result, alreadyReviewed){
+  // mcqOrder/saOrder record which questions from the master pool this student
+  // was actually given, in display order. Older results predate random
+  // subsets — fall back to "the whole pool, in its original order" for those.
+  const mcqOrder = Array.isArray(result.mcqOrder) ? result.mcqOrder : (test.mcq || []).map((_, i) => i);
+  const saOrder = Array.isArray(result.saOrder) ? result.saOrder : (test.shortAnswer || []).map((_, i) => i);
+  const saMaxTotal = saOrder.reduce((s, qi) => s + ((test.shortAnswer || [])[qi]?.marks || 0), 0);
+
   const saGraded = result.graded;
   const saTotal = (result.shortAnswers || []).reduce((sum, a) => sum + (a.marks || 0), 0);
   const totalScore = result.totalScore != null ? result.totalScore : (result.mcqScore + (saGraded ? saTotal : 0));
-  const maxTotal = result.maxMcqScore + (test.shortAnswer || []).reduce((s, q) => s + q.marks, 0);
+  const maxTotal = result.maxMcqScore + saMaxTotal;
 
   document.getElementById('resultSummary').innerHTML = `
     <div class="score-card">
@@ -265,7 +272,7 @@ function renderResult(test, result, alreadyReviewed){
       <div class="big">${totalScore}/${maxTotal}</div>
       <div class="sub">
         MCQ: ${result.mcqScore}/${result.maxMcqScore}
-        ${ (test.shortAnswer||[]).length ? ' &middot; Short answer: ' + (saGraded ? saTotal + '/' + (test.shortAnswer||[]).reduce((s,q)=>s+q.marks,0) : 'pending grading') : '' }
+        ${ saOrder.length ? ' &middot; Short answer: ' + (saGraded ? saTotal + '/' + saMaxTotal : 'pending grading') : '' }
         &middot; Flags: ${result.flagCount}${result.autoSubmitted ? ' (auto-submitted)' : ''}
       </div>
     </div>
@@ -285,12 +292,14 @@ function renderResult(test, result, alreadyReviewed){
 
   let html = '<div class="review-title">Your responses</div>';
 
-  (test.mcq || []).forEach((q, qi) => {
-    const sel = (result.mcqAnswers || [])[qi];
+  mcqOrder.forEach((qi, displayIndex) => {
+    const q = test.mcq[qi];
+    if (!q) return; // guards against a pool edited after this result was recorded
+    const sel = (result.mcqAnswers || [])[displayIndex];
     const isCorrect = sel !== null && sel !== undefined && sel === q.correctIndex;
     html += `<div class="review-q">
       <div class="rqhead">
-        <span>MCQ ${qi+1}</span>
+        <span>MCQ ${displayIndex+1}</span>
         <span>
           ${isCorrect ? q.marks : 0}/${q.marks} mark${q.marks==1?'':'s'}
           <span class="review-tag ${isCorrect ? 'correct' : 'wrong'}">${isCorrect ? 'Correct' : 'Incorrect'}</span>
@@ -309,12 +318,14 @@ function renderResult(test, result, alreadyReviewed){
     </div>`;
   });
 
-  (test.shortAnswer || []).forEach((q, qi) => {
-    const a = (result.shortAnswers || [])[qi] || { text: '', marks: null };
+  saOrder.forEach((qi, displayIndex) => {
+    const q = test.shortAnswer[qi];
+    if (!q) return;
+    const a = (result.shortAnswers || [])[displayIndex] || { text: '', marks: null };
     const graded = a.marks !== null && a.marks !== undefined;
     html += `<div class="review-q">
       <div class="rqhead">
-        <span>Short answer ${qi+1}</span>
+        <span>Short answer ${displayIndex+1}</span>
         <span>
           ${graded ? a.marks : q.marks} mark${q.marks==1?'':'s'}
           <span class="review-tag ${graded ? 'graded' : 'pending'}">${graded ? ('Score: ' + a.marks + '/' + q.marks) : 'Pending grading'}</span>
