@@ -80,6 +80,16 @@
           <input type="number" id="newTestMaxV" value="3" min="1">
         </div>
       </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="newTestMcqSelectCount">Random MCQs per student (leave blank for all)</label>
+          <input type="number" id="newTestMcqSelectCount" min="1" placeholder="e.g. 20 out of a 50-question pool">
+        </div>
+        <div class="field">
+          <label for="newTestSaSelectCount">Random short-answer per student (leave blank for all)</label>
+          <input type="number" id="newTestSaSelectCount" min="1" placeholder="optional">
+        </div>
+      </div>
 
       <div id="mcqBuilder"></div>
       <button id="addMcqBtn" class="btn btn-outline btn-sm" type="button">+ Add MCQ question</button>
@@ -93,7 +103,7 @@
 
       <details id="jsonImportDetails" style="margin-top:22px;">
         <summary style="cursor:pointer;font-size:13px;color:#4B5559;font-weight:600;">Or paste a test as JSON instead</summary>
-        <p style="font-size:12.5px;color:#6B7478;margin:10px 0;">Shape: <code>{ id, className, title, durationMinutes, maxViolations, mcq: [{text, options:[], correctIndex, marks}], shortAnswer: [{text, marks}] }</code></p>
+        <p style="font-size:12.5px;color:#6B7478;margin:10px 0;">Shape: <code>{ id, className, title, durationMinutes, maxViolations, mcq: [{text, options:[], correctIndex, marks}], shortAnswer: [{text, marks}], mcqSelectCount, saSelectCount }</code><br>Add a master pool of any size in <code>mcq</code> (e.g. 50 questions) and set <code>mcqSelectCount</code> (e.g. 20) to have each student randomly get that many. Omit it to show every question to everyone, as before.</p>
         <textarea id="jsonImport" rows="6" placeholder='{ "id": "...", ... }'></textarea>
         <button id="importJsonBtn" class="btn btn-outline btn-sm" style="margin-top:8px;" type="button">Import JSON as new test</button>
       </details>
@@ -355,6 +365,8 @@ function collectTestFromForm(){
   const title = document.getElementById('newTestTitle').value.trim();
   const durationMinutes = parseInt(document.getElementById('newTestDuration').value, 10);
   const maxViolations = parseInt(document.getElementById('newTestMaxV').value, 10);
+  const mcqSelectCountRaw = document.getElementById('newTestMcqSelectCount').value.trim();
+  const saSelectCountRaw = document.getElementById('newTestSaSelectCount').value.trim();
 
   if (!id || !/^[a-z0-9-]+$/i.test(id)) throw new Error('Test ID is required and should only contain letters, numbers and hyphens.');
   if (!className) throw new Error('Class is required.');
@@ -381,7 +393,21 @@ function collectTestFromForm(){
 
   if (mcq.length === 0 && shortAnswer.length === 0) throw new Error('Add at least one question.');
 
-  return { id, className, title, durationMinutes, maxViolations, mcq, shortAnswer, open: true };
+  const mcqSelectCount = mcqSelectCountRaw ? parseInt(mcqSelectCountRaw, 10) : null;
+  if (mcqSelectCount !== null) {
+    if (!mcqSelectCount || mcqSelectCount < 1) throw new Error('Random MCQs per student must be a positive number.');
+    if (mcqSelectCount > mcq.length) throw new Error(`Random MCQs per student (${mcqSelectCount}) can't exceed the number of MCQs you've added (${mcq.length}).`);
+  }
+  const saSelectCount = saSelectCountRaw ? parseInt(saSelectCountRaw, 10) : null;
+  if (saSelectCount !== null) {
+    if (!saSelectCount || saSelectCount < 1) throw new Error('Random short-answer per student must be a positive number.');
+    if (saSelectCount > shortAnswer.length) throw new Error(`Random short-answer per student (${saSelectCount}) can't exceed the number you've added (${shortAnswer.length}).`);
+  }
+
+  const t = { id, className, title, durationMinutes, maxViolations, mcq, shortAnswer, open: true };
+  if (mcqSelectCount !== null) t.mcqSelectCount = mcqSelectCount;
+  if (saSelectCount !== null) t.saSelectCount = saSelectCount;
+  return t;
 }
 
 /* Shared save routine used by both the manual builder and JSON import */
