@@ -39,6 +39,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="tests">Tests</button>
     <button class="tab-btn" data-tab="results">Results</button>
+    <button class="tab-btn" data-tab="reports">Reports</button>
   </div>
 
   <!-- ===================== TESTS TAB ===================== -->
@@ -136,6 +137,64 @@
       </table>
     </div>
   </div>
+
+  <!-- ===================== REPORTS TAB ===================== -->
+  <div class="tab-panel" id="tab-reports">
+    <div class="card" style="margin-bottom:24px;">
+      <div class="section-title">Export results</div>
+      <p style="font-size:13px;color:#6B7478;margin:-6px 0 14px;">Choose any filters (all optional), pick a report type, then preview or download. If a student has more than one attempt for the same exam, the latest attempt is used.</p>
+      <div class="field-row">
+        <div class="field">
+          <label for="rptIa">IA</label>
+          <select id="rptIa"><option value="">All IAs</option></select>
+        </div>
+        <div class="field">
+          <label for="rptClass">Class</label>
+          <select id="rptClass"><option value="">All classes</option></select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="rptTest">Exam</label>
+          <select id="rptTest"><option value="">All exams</option></select>
+        </div>
+        <div class="field">
+          <label for="rptStudent">Student (roll number or name)</label>
+          <input type="text" id="rptStudent" placeholder="e.g. 14 or Priya" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="rptType">Report type</label>
+        <select id="rptType">
+          <option value="exam">Exam-wise: one table per exam</option>
+          <option value="class">Class-wise: marksheet (students x exams) for each class</option>
+          <option value="ia">IA-wise: marksheet (students x exams) for each IA</option>
+          <option value="student">Student-wise: every exam for each student, plus a summary</option>
+          <option value="all">Complete workbook: all four reports together</option>
+        </select>
+      </div>
+      <div id="rptErr" class="banner error"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+        <button id="rptPreviewBtn" class="btn btn-dark btn-sm" type="button">Preview</button>
+        <button id="rptCsvBtn" class="btn btn-outline btn-sm" type="button">Download CSV</button>
+        <button id="rptXlsxBtn" class="btn btn-primary btn-sm" type="button">Download Excel (.xlsx)</button>
+        <button id="rptRefreshBtn" class="btn btn-outline btn-sm" type="button">Refresh data</button>
+      </div>
+      <p id="rptStatus" style="font-size:12.5px;color:#6B7478;margin-top:10px;"></p>
+    </div>
+
+    <div class="card" style="margin-bottom:24px;">
+      <details>
+        <summary style="cursor:pointer;font-size:13px;color:#4B5559;font-weight:600;">IA mapping: tell the system which IA each exam belongs to</summary>
+        <p style="font-size:12.5px;color:#6B7478;margin:10px 0;">By default the IA is read from the exam title (for example "IA III"). If an exam's title has no IA in it, or the guess is wrong, set it here. Your choice is saved on the exam.</p>
+        <div id="iaMap" style="overflow-x:auto;"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div id="rptPreview"><p style="font-size:13px;color:#6B7478;">Open this tab, choose a report type and click Preview.</p></div>
+    </div>
+  </div>
 </div>
 
 <!-- Grading modal -->
@@ -157,6 +216,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -640,6 +700,299 @@ document.getElementById('gradeSave').addEventListener('click', async () => {
     errEl.textContent = 'Could not save: ' + e.message;
     errEl.style.display = 'flex';
   }
+});
+
+/* ---------------- Reports: exam-wise, class-wise, IA-wise, student-wise ---------------- */
+const rpt = { loaded: false, tests: [], testsById: {}, results: [], lastSheets: [], lastLabel: '' };
+const IA_CHOICES = ['IA I', 'IA II', 'IA III', 'IA IV', 'IA V', 'Other'];
+
+function deriveIA(t){
+  if (t && t.ia) return t.ia;
+  const title = String((t && t.title) || '');
+  const m = title.match(/\bIA[\s-]*(VIII|VII|VI|IV|V|III|II|I|\d+)\b/i);
+  if (m) return 'IA ' + m[1].toUpperCase();
+  if (/\bIA\b/i.test(title)) return 'IA';
+  return 'Unassigned';
+}
+function rollKey(v){ return String(v ?? '').trim().toLowerCase(); }
+function natCompare(a, b){ return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true, sensitivity: 'base' }); }
+function tsMillis(ts){ return ts && ts.toMillis ? ts.toMillis() : 0; }
+function lc(v){ return String(v ?? '').trim().toLowerCase(); }
+function pct(total, max){ return max > 0 ? Math.round((total / max) * 1000) / 10 : ''; }
+
+function maxTotalFor(r){
+  const t = rpt.testsById[r.testId];
+  let saMax = 0;
+  if (t && Array.isArray(t.shortAnswer)) {
+    const order = Array.isArray(r.saOrder) ? r.saOrder : t.shortAnswer.map((_, i) => i);
+    saMax = order.reduce((s, qi) => s + ((t.shortAnswer[qi] && t.shortAnswer[qi].marks) || 0), 0);
+  }
+  return (r.maxMcqScore || 0) + saMax;
+}
+function saScoreFor(r){ return (r.shortAnswers || []).reduce((s, a) => s + (a.marks || 0), 0); }
+function infoFor(r){
+  const t = rpt.testsById[r.testId];
+  return {
+    title: (t && t.title) || r.testTitle || r.testId || '',
+    ia: deriveIA(t || { title: r.testTitle }),
+    className: r.className || (t && t.className) || ''
+  };
+}
+
+async function loadReportData(){
+  const status = document.getElementById('rptStatus');
+  status.textContent = 'Loading results…';
+  try {
+    const [tSnap, rSnap] = await Promise.all([db.collection('tests').get(), db.collection('results').get()]);
+    rpt.tests = []; rpt.testsById = {};
+    tSnap.forEach(d => { const t = { id: d.id, ...d.data() }; rpt.tests.push(t); rpt.testsById[d.id] = t; });
+    const latest = {};
+    rSnap.forEach(d => {
+      const r = { id: d.id, ...d.data() };
+      const key = rollKey(r.roll) + '||' + r.testId;
+      if (!latest[key] || tsMillis(r.submittedAt) >= tsMillis(latest[key].submittedAt)) latest[key] = r;
+    });
+    rpt.results = Object.values(latest);
+    rpt.loaded = true;
+    status.textContent = rpt.results.length + ' result(s) across ' + rpt.tests.length + ' exam(s) loaded.';
+    populateReportFilters();
+    renderIaMapping();
+  } catch (e) {
+    console.error('report data load failed:', e);
+    status.textContent = '';
+    showRptErr('Could not load results (' + e.message + ').');
+  }
+}
+function showRptErr(msg){ const el = document.getElementById('rptErr'); el.textContent = msg; el.style.display = 'flex'; }
+function clearRptErr(){ document.getElementById('rptErr').style.display = 'none'; }
+
+function fillSelect(id, firstLabel, values, keep){
+  const sel = document.getElementById(id);
+  const prev = keep ? sel.value : '';
+  let html = '<option value="">' + escapeHtml(firstLabel) + '</option>';
+  values.forEach(v => { html += '<option value="' + escapeHtml(v.value) + '">' + escapeHtml(v.label) + '</option>'; });
+  sel.innerHTML = html;
+  if (prev && values.some(v => v.value === prev)) sel.value = prev;
+}
+function populateReportFilters(){
+  const ias = [...new Set(rpt.tests.map(deriveIA).concat(rpt.results.map(r => infoFor(r).ia)))].sort(natCompare);
+  fillSelect('rptIa', 'All IAs', ias.map(v => ({ value: v, label: v })), true);
+  const classes = [...new Set(rpt.tests.map(t => t.className).concat(rpt.results.map(r => r.className)).filter(Boolean))].sort(natCompare);
+  fillSelect('rptClass', 'All classes', classes.map(v => ({ value: v, label: v })), true);
+  refreshExamOptions();
+}
+function refreshExamOptions(){
+  const ia = document.getElementById('rptIa').value;
+  const cls = document.getElementById('rptClass').value;
+  const list = rpt.tests.filter(t => (!ia || deriveIA(t) === ia) && (!cls || lc(t.className) === lc(cls)))
+    .sort((a, b) => natCompare(deriveIA(a), deriveIA(b)) || natCompare(a.title, b.title));
+  fillSelect('rptTest', 'All exams', list.map(t => ({ value: t.id, label: t.title + ' (' + t.className + ')' })), true);
+}
+
+function renderIaMapping(){
+  const box = document.getElementById('iaMap');
+  const list = rpt.tests.slice().sort((a, b) => natCompare(a.className, b.className) || natCompare(a.title, b.title));
+  if (list.length === 0) { box.innerHTML = '<p style="font-size:13px;color:#6B7478;">No exams yet.</p>'; return; }
+  let html = '<table><thead><tr><th>Exam</th><th>Class</th><th>IA</th></tr></thead><tbody>';
+  list.forEach(t => {
+    const auto = deriveIA({ title: t.title });
+    let opts = '<option value="">Auto (' + escapeHtml(auto) + ')</option>';
+    IA_CHOICES.forEach(c => { opts += '<option value="' + c + '"' + (t.ia === c ? ' selected' : '') + '>' + c + '</option>'; });
+    html += '<tr><td>' + escapeHtml(t.title) + '</td><td>' + escapeHtml(t.className) + '</td><td><select class="ia-set" data-id="' + t.id + '">' + opts + '</select></td></tr>';
+  });
+  html += '</tbody></table>';
+  box.innerHTML = html;
+  box.querySelectorAll('.ia-set').forEach(sel => sel.addEventListener('change', async () => {
+    const id = sel.dataset.id;
+    const val = sel.value;
+    try {
+      await db.collection('tests').doc(id).update({ ia: val ? val : firebase.firestore.FieldValue.delete() });
+      if (val) rpt.testsById[id].ia = val; else delete rpt.testsById[id].ia;
+      populateReportFilters();
+      document.getElementById('rptStatus').textContent = 'IA saved for that exam.';
+    } catch (e) {
+      showRptErr('Could not save the IA (' + e.message + ').');
+    }
+  }));
+}
+
+function getFilteredResults(){
+  const ia = document.getElementById('rptIa').value;
+  const cls = document.getElementById('rptClass').value;
+  const testId = document.getElementById('rptTest').value;
+  const q = lc(document.getElementById('rptStudent').value);
+  return rpt.results.filter(r => {
+    const info = infoFor(r);
+    if (ia && info.ia !== ia) return false;
+    if (cls && lc(info.className) !== lc(cls)) return false;
+    if (testId && r.testId !== testId) return false;
+    if (q && !(lc(r.roll).includes(q) || lc(r.name).includes(q))) return false;
+    return true;
+  });
+}
+
+/* ---- report builders: each returns [{ name, title, aoa }] ---- */
+function buildExamWise(rows){
+  const byTest = {};
+  rows.forEach(r => { (byTest[r.testId] = byTest[r.testId] || []).push(r); });
+  return Object.keys(byTest).map(tid => {
+    const list = byTest[tid].sort((a, b) => natCompare(a.roll, b.roll));
+    const info = infoFor(list[0]);
+    const aoa = [['Roll', 'Name', 'Class', 'MCQ score', 'Short-answer score', 'Total score', 'Max score', 'Percentage', 'Flags', 'Auto-submitted', 'Submitted at', 'Time taken', 'Status']];
+    list.forEach(r => {
+      const max = maxTotalFor(r);
+      aoa.push([r.roll, r.name, r.className, r.mcqScore ?? 0, saScoreFor(r), r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, r.autoSubmitted ? 'Yes' : 'No', formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']);
+    });
+    return { name: 'Exam ' + info.title, title: 'Exam-wise: ' + info.title + ' [' + info.ia + '] - ' + info.className + ' (' + list.length + ' students)', aoa };
+  }).sort((a, b) => natCompare(a.title, b.title));
+}
+
+function buildMatrix(rows, groupKeyFn, labelPrefix, withClassCol){
+  const groups = {};
+  rows.forEach(r => { const k = groupKeyFn(r) || 'Unassigned'; (groups[k] = groups[k] || []).push(r); });
+  return Object.keys(groups).sort(natCompare).map(k => {
+    const list = groups[k];
+    const examMap = {};
+    list.forEach(r => {
+      if (!examMap[r.testId]) { const info = infoFor(r); examMap[r.testId] = { id: r.testId, title: info.title, ia: info.ia, max: maxTotalFor(r) }; }
+    });
+    const exams = Object.values(examMap).sort((a, b) => natCompare(a.ia, b.ia) || natCompare(a.title, b.title));
+    const stuMap = {};
+    list.forEach(r => {
+      const rk = rollKey(r.roll) + (withClassCol ? '||' + lc(r.className) : '');
+      if (!stuMap[rk]) stuMap[rk] = { roll: r.roll, name: r.name, className: r.className, byTest: {} };
+      stuMap[rk].byTest[r.testId] = r;
+    });
+    const students = Object.values(stuMap).sort((a, b) => natCompare(a.className, b.className) || natCompare(a.roll, b.roll));
+    const header = (withClassCol ? ['Class'] : []).concat(['Roll', 'Name'])
+      .concat(exams.map(e => e.title + ' [' + e.ia + '] (max ' + e.max + ')'))
+      .concat(['Total', 'Max (attempted)', 'Percentage', 'Exams attempted', 'Pending grading']);
+    const aoa = [header];
+    students.forEach(s => {
+      let total = 0, max = 0, att = 0, pend = 0;
+      const cells = exams.map(e => {
+        const r = s.byTest[e.id];
+        if (!r) return 'AB';
+        const m = maxTotalFor(r);
+        total += (r.totalScore ?? 0); max += m; att++;
+        if (!r.graded) pend++;
+        return r.totalScore ?? 0;
+      });
+      aoa.push((withClassCol ? [s.className] : []).concat([s.roll, s.name]).concat(cells).concat([total, max, pct(total, max), att, pend]));
+    });
+    return { name: labelPrefix + ' ' + k, title: labelPrefix + ': ' + k + ' (' + students.length + ' students, ' + exams.length + ' exams; AB = absent / not attempted)', aoa };
+  });
+}
+function buildClassWise(rows){ return buildMatrix(rows, r => infoFor(r).className, 'Class', false); }
+function buildIaWise(rows){ return buildMatrix(rows, r => infoFor(r).ia, 'IA', true); }
+
+function buildStudentWise(rows){
+  const sorted = rows.slice().sort((a, b) =>
+    natCompare(a.roll, b.roll) || natCompare(infoFor(a).ia, infoFor(b).ia) || natCompare(infoFor(a).title, infoFor(b).title));
+  const aoa = [['Roll', 'Name', 'Class', 'IA', 'Exam', 'MCQ score', 'Short-answer score', 'Total score', 'Max score', 'Percentage', 'Flags', 'Submitted at', 'Time taken', 'Status']];
+  const stu = {};
+  sorted.forEach(r => {
+    const info = infoFor(r);
+    const max = maxTotalFor(r);
+    aoa.push([r.roll, r.name, info.className, info.ia, info.title, r.mcqScore ?? 0, saScoreFor(r), r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']);
+    const k = rollKey(r.roll) + '||' + lc(info.className);
+    if (!stu[k]) stu[k] = { roll: r.roll, name: r.name, className: info.className, n: 0, total: 0, max: 0 };
+    stu[k].n++; stu[k].total += (r.totalScore ?? 0); stu[k].max += max;
+  });
+  const sum = [['Roll', 'Name', 'Class', 'Exams attempted', 'Total score', 'Max score', 'Percentage']];
+  Object.values(stu).sort((a, b) => natCompare(a.className, b.className) || natCompare(a.roll, b.roll))
+    .forEach(s => sum.push([s.roll, s.name, s.className, s.n, s.total, s.max, pct(s.total, s.max)]));
+  return [
+    { name: 'Student-wise', title: 'Student-wise: every exam for each student (' + sorted.length + ' results)', aoa },
+    { name: 'Student summary', title: 'Student summary: totals across the exams shown', aoa: sum }
+  ];
+}
+
+function buildReport(type, rows){
+  if (type === 'exam') return buildExamWise(rows);
+  if (type === 'class') return buildClassWise(rows);
+  if (type === 'ia') return buildIaWise(rows);
+  if (type === 'student') return buildStudentWise(rows);
+  // complete workbook: all four, with sheet-name prefixes so they stay distinguishable
+  const tag = (arr, p) => arr.map(s => ({ ...s, name: p + ' ' + s.name.replace(/^(Exam|Class|IA) /, '') }));
+  return tag(buildExamWise(rows), 'E').concat(tag(buildClassWise(rows), 'C'), tag(buildIaWise(rows), 'IA'), buildStudentWise(rows));
+}
+
+function runReport(){
+  clearRptErr();
+  if (!rpt.loaded) { showRptErr('Results are still loading. Please wait a moment and try again.'); return null; }
+  const rows = getFilteredResults();
+  if (rows.length === 0) {
+    rpt.lastSheets = [];
+    renderReportPreview([]);
+    showRptErr('No results match these filters.');
+    return null;
+  }
+  const type = document.getElementById('rptType').value;
+  rpt.lastSheets = buildReport(type, rows);
+  rpt.lastLabel = type;
+  return rpt.lastSheets;
+}
+
+function renderReportPreview(sheets){
+  const wrap = document.getElementById('rptPreview');
+  if (!sheets.length) { wrap.innerHTML = '<p style="font-size:13px;color:#6B7478;">Nothing to show.</p>'; return; }
+  wrap.innerHTML = sheets.map(sh => {
+    const head = '<tr>' + sh.aoa[0].map(h => '<th>' + escapeHtml(h) + '</th>').join('') + '</tr>';
+    const body = sh.aoa.slice(1).map(row => '<tr>' + row.map(c => '<td>' + escapeHtml(String(c ?? '')) + '</td>').join('') + '</tr>').join('');
+    return '<div class="section-title" style="margin:18px 0 8px;font-size:15px;">' + escapeHtml(sh.title) + '</div>' +
+           '<div style="overflow-x:auto;"><table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+  }).join('');
+}
+
+function reportFileStem(){
+  const parts = ['Results', rpt.lastLabel === 'all' ? 'complete' : rpt.lastLabel + '-wise'];
+  const ia = document.getElementById('rptIa').value;
+  const cls = document.getElementById('rptClass').value;
+  if (ia) parts.push(ia); if (cls) parts.push(cls);
+  parts.push(new Date().toISOString().slice(0, 10));
+  return parts.join('_').replace(/[^a-z0-9\-_.]+/gi, '-');
+}
+function sheetsToCsv(sheets){
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  return '\uFEFF' + sheets.map(sh => esc(sh.title) + '\n' + sh.aoa.map(row => row.map(esc).join(',')).join('\n')).join('\n\n');
+}
+function uniqueSheetName(base, used){
+  let name = String(base).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 31) || 'Sheet';
+  let n = 2, candidate = name;
+  while (used.has(candidate.toLowerCase())) { const suffix = ' ' + n++; candidate = name.slice(0, 31 - suffix.length) + suffix; }
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+function saveBlob(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+document.querySelector('.tab-btn[data-tab="reports"]').addEventListener('click', () => { if (!rpt.loaded) loadReportData(); });
+document.getElementById('rptRefreshBtn').addEventListener('click', () => loadReportData());
+document.getElementById('rptIa').addEventListener('change', refreshExamOptions);
+document.getElementById('rptClass').addEventListener('change', refreshExamOptions);
+document.getElementById('rptPreviewBtn').addEventListener('click', () => { const s = runReport(); if (s) renderReportPreview(s); });
+document.getElementById('rptCsvBtn').addEventListener('click', () => {
+  const s = runReport();
+  if (!s) return;
+  renderReportPreview(s);
+  saveBlob(new Blob([sheetsToCsv(s)], { type: 'text/csv;charset=utf-8' }), reportFileStem() + '.csv');
+});
+document.getElementById('rptXlsxBtn').addEventListener('click', () => {
+  const s = runReport();
+  if (!s) return;
+  renderReportPreview(s);
+  if (typeof XLSX === 'undefined') { showRptErr('The Excel library did not load (check your internet connection). You can still use Download CSV.'); return; }
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+  s.forEach(sh => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.aoa), uniqueSheetName(sh.name, used)));
+  XLSX.writeFile(wb, reportFileStem() + '.xlsx');
 });
 </script>
 </body>
