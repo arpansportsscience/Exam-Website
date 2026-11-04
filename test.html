@@ -54,6 +54,8 @@
     font-size:13.5px; text-align:center; border-bottom:1px solid #FFECB5;
   }
   .ios-notice b{font-weight:700;}
+  .section-head{margin:30px 0 14px;padding:12px 16px;border-left:4px solid var(--amber);background:rgba(255,177,0,0.10);border-radius:8px;font-family:var(--font-display);font-size:17px;letter-spacing:0.02em;}
+  main .section-head:first-child{margin-top:0;}
 </style>
 </head>
 <body>
@@ -238,6 +240,40 @@ function seededShuffleIndices(length, rng){
   return arr;
 }
 
+function shuffleArray(arr, rng){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+/* Balanced selection across groups (chapters): every group gets floor(count / groups) questions,
+   and the remaining places go to randomly chosen groups that still have unused questions.
+   Seeded, so the same student always gets the same paper. Returns original pool indices. */
+function pickBalancedByGroup(pool, count, rng){
+  const groups = {};
+  pool.forEach((q, i) => { const g = (q && q.group) || '_ungrouped'; (groups[g] = groups[g] || []).push(i); });
+  const names = Object.keys(groups).sort();
+  names.forEach(g => { groups[g] = shuffleArray(groups[g], rng); });
+  const quota = {};
+  const base = Math.floor(count / names.length);
+  let remaining = count;
+  names.forEach(g => { quota[g] = Math.min(groups[g].length, base); remaining -= quota[g]; });
+  const order = shuffleArray(names, rng);
+  while (remaining > 0) {
+    let progressed = false;
+    for (const g of order) {
+      if (remaining <= 0) break;
+      if (quota[g] < groups[g].length) { quota[g]++; remaining--; progressed = true; }
+    }
+    if (!progressed) break;
+  }
+  const picked = [];
+  names.forEach(g => groups[g].slice(0, quota[g]).forEach(i => picked.push(i)));
+  return shuffleArray(picked, rng);
+}
+
 function renderQuestions(){
   const rng = makeSeededRandom(session.roll + '::' + test.id);
 
@@ -245,7 +281,12 @@ function renderQuestions(){
   const mcqOrderFull = seededShuffleIndices(mcqPoolSize, rng);
   const mcqCount = (typeof test.mcqSelectCount === 'number' && test.mcqSelectCount > 0 && test.mcqSelectCount < mcqPoolSize)
     ? test.mcqSelectCount : mcqPoolSize;
-  mcqSelectedOrder = mcqOrderFull.slice(0, mcqCount);
+  // If the questions carry a 'group' (for example a chapter name) and only a subset is asked,
+  // pick the subset in a balanced way so every group is represented. Otherwise: plain random subset.
+  const isGrouped = (test.mcq || []).some(q => q && q.group);
+  mcqSelectedOrder = (isGrouped && mcqCount < mcqPoolSize)
+    ? pickBalancedByGroup(test.mcq, mcqCount, rng)
+    : mcqOrderFull.slice(0, mcqCount);
 
   const saPoolSize = (test.shortAnswer || []).length;
   const saOrderFull = seededShuffleIndices(saPoolSize, rng);
@@ -253,9 +294,29 @@ function renderQuestions(){
     ? test.saSelectCount : saPoolSize;
   saSelectedOrder = saOrderFull.slice(0, saCount);
 
+  // If questions carry a 'section' (for example Theory / Practical), show the sections one after the
+  // other in the order they first appear in the paper; questions stay shuffled within each section.
+  const sectionList = [];
+  (test.mcq || []).forEach(q => { const sec = (q && q.section) || ''; if (sec && !sectionList.includes(sec)) sectionList.push(sec); });
+  const hasSections = sectionList.length > 0;
+  if (hasSections) {
+    const rank = qi => { const r = sectionList.indexOf((test.mcq[qi] && test.mcq[qi].section) || ''); return r < 0 ? sectionList.length : r; };
+    mcqSelectedOrder = mcqSelectedOrder.map((qi, pos) => ({ qi, pos }))
+      .sort((a, b) => rank(a.qi) - rank(b.qi) || a.pos - b.pos)
+      .map(x => x.qi);
+  }
+
   let html = '';
+  let lastSection = null;
   mcqSelectedOrder.forEach((qi, displayIndex) => {
     const q = test.mcq[qi];
+    if (hasSections && (q.section || '') !== lastSection) {
+      lastSection = q.section || '';
+      const inSection = mcqSelectedOrder.filter(i => ((test.mcq[i].section) || '') === lastSection);
+      const secMarks = inSection.reduce((sum, i) => sum + test.mcq[i].marks, 0);
+      const letter = String.fromCharCode(65 + Math.max(0, sectionList.indexOf(lastSection)));
+      html += `<div class="section-head">Section ${letter}: ${escapeHtml(lastSection || 'Other')} (${inSection.length} questions, ${secMarks} marks)</div>`;
+    }
     html += `<div class="q" data-type="mcq" data-qi="${qi}">
       <div class="qhead"><span>MCQ ${displayIndex+1}</span><span>${q.marks} mark${q.marks==1?'':'s'}</span></div>
       <div class="qtext">${escapeHtml(q.text)}</div>
@@ -392,6 +453,7 @@ async function submitTest(auto, reason){
   // Only grade the subset of the pool actually shown to this student —
   // mcqSelectedOrder/saSelectedOrder are the ones set by renderQuestions().
   let mcqScore = 0, maxMcqScore = 0;
+  const sectionScores = {};   // e.g. { Theory: {score, max}, Practical: {score, max} }
   const mcqAnswers = [];
   mcqSelectedOrder.forEach(qi => {
     const q = test.mcq[qi];
@@ -400,6 +462,11 @@ async function submitTest(auto, reason){
     const sel = checked ? parseInt(checked.value, 10) : null;
     mcqAnswers.push(sel);
     if (sel !== null && sel === q.correctIndex) mcqScore += q.marks;
+    if (q.section) {
+      const e = sectionScores[q.section] = sectionScores[q.section] || { score: 0, max: 0 };
+      e.max += q.marks;
+      if (sel !== null && sel === q.correctIndex) e.score += q.marks;
+    }
   });
 
   const shortAnswers = [];
@@ -440,6 +507,7 @@ async function submitTest(auto, reason){
     saOrder: saSelectedOrder,
     submittedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
+  if (Object.keys(sectionScores).length) result.sectionScores = sectionScores;
 
   try {
     await db.collection('results').add(result);
@@ -455,7 +523,7 @@ async function submitTest(auto, reason){
   examWrap.style.display = 'none';
   document.getElementById('doneSummary').innerHTML = (saSelectedOrder.length > 0
     ? `Auto-graded score: ${mcqScore}/${maxMcqScore} (multiple choice only). Your short answers will be graded by your teacher.`
-    : `Your score: ${mcqScore}/${maxMcqScore}.`) +
+    : `Your score: ${mcqScore}/${maxMcqScore}` + (Object.keys(sectionScores).length ? ' (' + Object.keys(sectionScores).map(k => k + ': ' + sectionScores[k].score + '/' + sectionScores[k].max).join(', ') + ')' : '') + '.') +
     ` You can view your full response sheet anytime on <a href="review.html">the results page</a>.`;
 
   doneScreen.style.display = 'block';
