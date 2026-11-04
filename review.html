@@ -266,12 +266,18 @@ function renderResult(test, result, alreadyReviewed){
   const totalScore = result.totalScore != null ? result.totalScore : (result.mcqScore + (saGraded ? saTotal : 0));
   const maxTotal = result.maxMcqScore + saMaxTotal;
 
+  const secKeys = Object.keys(result.sectionScores || {});
+  const secLine = secKeys.length
+    ? '<br>' + secKeys.map(k => escapeHtml(k) + ': <b>' + result.sectionScores[k].score + '/' + result.sectionScores[k].max + '</b>').join(' &middot; ')
+    : '';
+
   document.getElementById('resultSummary').innerHTML = `
     <div class="score-card">
       <div>${escapeHtml(result.name)} — ${escapeHtml(result.roll)}</div>
       <div class="big">${totalScore}/${maxTotal}</div>
       <div class="sub">
         MCQ: ${result.mcqScore}/${result.maxMcqScore}
+        ${secLine}
         ${ saOrder.length ? ' &middot; Short answer: ' + (saGraded ? saTotal + '/' + saMaxTotal : 'pending grading') : '' }
         &middot; Flags: ${result.flagCount}${result.autoSubmitted ? ' (auto-submitted)' : ''}
       </div>
@@ -299,7 +305,7 @@ function renderResult(test, result, alreadyReviewed){
     const isCorrect = sel !== null && sel !== undefined && sel === q.correctIndex;
     html += `<div class="review-q">
       <div class="rqhead">
-        <span>MCQ ${displayIndex+1}</span>
+        <span>MCQ ${displayIndex+1}${q.section ? ' &middot; ' + escapeHtml(q.section) : ''}</span>
         <span>
           ${isCorrect ? q.marks : 0}/${q.marks} mark${q.marks==1?'':'s'}
           <span class="review-tag ${isCorrect ? 'correct' : 'wrong'}">${isCorrect ? 'Correct' : 'Incorrect'}</span>
