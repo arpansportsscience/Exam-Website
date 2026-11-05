@@ -579,6 +579,23 @@ document.getElementById('loadResultsBtn').addEventListener('click', async () => 
   renderResultsTable();
 });
 
+/* Theory / Practical (or any other) section scores stored on a result as sectionScores */
+function secPri(n){ return n === 'Theory' ? 0 : n === 'Practical' ? 1 : 2; }
+function sectionNamesIn(rows){
+  return [...new Set(rows.flatMap(r => Object.keys(r.sectionScores || {})))]
+    .sort((a, b) => secPri(a) - secPri(b) || String(a).localeCompare(String(b)));
+}
+function secHeaders(names){ return names.flatMap(n => [n + ' score', n + ' max']); }
+function secCells(r, names){
+  const out = [];
+  names.forEach(n => { const e = (r.sectionScores || {})[n]; out.push(e ? e.score : '', e ? e.max : ''); });
+  return out;
+}
+function secBreak(r){
+  const k = Object.keys(r.sectionScores || {});
+  return k.length ? '<br><small>' + k.map(n => escapeHtml(n) + ' ' + r.sectionScores[n].score + '/' + r.sectionScores[n].max).join(' &middot; ') + '</small>' : '';
+}
+
 function formatSubmittedAt(ts){
   if (!ts || !ts.toDate) return '—';
   const d = ts.toDate();
@@ -604,7 +621,7 @@ function renderResultsTable(){
     html += `<tr>
       <td>${escapeHtml(r.name)}</td>
       <td>${escapeHtml(r.roll)}</td>
-      <td>${r.mcqScore}/${r.maxMcqScore}</td>
+      <td>${r.mcqScore}/${r.maxMcqScore}${secBreak(r)}</td>
       <td>${saTotal}</td>
       <td><b>${r.totalScore}</b></td>
       <td>${r.flagCount}${r.autoSubmitted ? ' (auto)' : ''}</td>
@@ -620,10 +637,11 @@ function renderResultsTable(){
 
 document.getElementById('exportCsvBtn').addEventListener('click', () => {
   if (loadedResults.length === 0) { alert('Load results first.'); return; }
-  const rows = [['Name','Roll','Class','Test','MCQ Score','MCQ Max','Short-Answer Total','Total Score','Flags','Submitted At','Time Taken','Auto-submitted','Graded']];
+  const secNames = sectionNamesIn(loadedResults);
+  const rows = [['Name','Roll','Class','Test','MCQ Score','MCQ Max','Short-Answer Total'].concat(secHeaders(secNames), ['Total Score','Flags','Submitted At','Time Taken','Auto-submitted','Graded'])];
   loadedResults.forEach(r => {
     const saTotal = (r.shortAnswers || []).reduce((sum, a) => sum + (a.marks || 0), 0);
-    rows.push([r.name, r.roll, r.className, r.testTitle, r.mcqScore, r.maxMcqScore, saTotal, r.totalScore, r.flagCount, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.autoSubmitted ? 'Yes' : 'No', r.graded ? 'Yes' : 'No']);
+    rows.push([r.name, r.roll, r.className, r.testTitle, r.mcqScore, r.maxMcqScore, saTotal].concat(secCells(r, secNames), [r.totalScore, r.flagCount, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.autoSubmitted ? 'Yes' : 'No', r.graded ? 'Yes' : 'No']));
   });
   const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -838,10 +856,11 @@ function buildExamWise(rows){
   return Object.keys(byTest).map(tid => {
     const list = byTest[tid].sort((a, b) => natCompare(a.roll, b.roll));
     const info = infoFor(list[0]);
-    const aoa = [['Roll', 'Name', 'Class', 'MCQ score', 'Short-answer score', 'Total score', 'Max score', 'Percentage', 'Flags', 'Auto-submitted', 'Submitted at', 'Time taken', 'Status']];
+    const names = sectionNamesIn(list);
+    const aoa = [['Roll', 'Name', 'Class', 'MCQ score', 'Short-answer score'].concat(secHeaders(names), ['Total score', 'Max score', 'Percentage', 'Flags', 'Auto-submitted', 'Submitted at', 'Time taken', 'Status'])];
     list.forEach(r => {
       const max = maxTotalFor(r);
-      aoa.push([r.roll, r.name, r.className, r.mcqScore ?? 0, saScoreFor(r), r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, r.autoSubmitted ? 'Yes' : 'No', formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']);
+      aoa.push([r.roll, r.name, r.className, r.mcqScore ?? 0, saScoreFor(r)].concat(secCells(r, names), [r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, r.autoSubmitted ? 'Yes' : 'No', formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']));
     });
     return { name: 'Exam ' + info.title, title: 'Exam-wise: ' + info.title + ' [' + info.ia + '] - ' + info.className + ' (' + list.length + ' students)', aoa };
   }).sort((a, b) => natCompare(a.title, b.title));
@@ -857,6 +876,14 @@ function buildMatrix(rows, groupKeyFn, labelPrefix, withClassCol){
       if (!examMap[r.testId]) { const info = infoFor(r); examMap[r.testId] = { id: r.testId, title: info.title, ia: info.ia, max: maxTotalFor(r) }; }
     });
     const exams = Object.values(examMap).sort((a, b) => natCompare(a.ia, b.ia) || natCompare(a.title, b.title));
+    // For exams that have sections (e.g. Theory / Practical), give each section its own column.
+    exams.forEach(e => {
+      const eRows = list.filter(r => r.testId === e.id);
+      e.secNames = sectionNamesIn(eRows);
+      e.secMax = {};
+      e.secNames.forEach(n => { e.secMax[n] = Math.max(...eRows.map(r => ((r.sectionScores || {})[n] || {}).max || 0)); });
+    });
+    const allSec = sectionNamesIn(list);
     const stuMap = {};
     list.forEach(r => {
       const rk = rollKey(r.roll) + (withClassCol ? '||' + lc(r.className) : '');
@@ -864,21 +891,38 @@ function buildMatrix(rows, groupKeyFn, labelPrefix, withClassCol){
       stuMap[rk].byTest[r.testId] = r;
     });
     const students = Object.values(stuMap).sort((a, b) => natCompare(a.className, b.className) || natCompare(a.roll, b.roll));
+    const examCols = e => {
+      const base = e.title + ' [' + e.ia + ']';
+      return e.secNames.length
+        ? e.secNames.map(n => base + ' - ' + n + ' (max ' + e.secMax[n] + ')').concat([base + ' - Total (max ' + e.max + ')'])
+        : [base + ' (max ' + e.max + ')'];
+    };
     const header = (withClassCol ? ['Class'] : []).concat(['Roll', 'Name'])
-      .concat(exams.map(e => e.title + ' [' + e.ia + '] (max ' + e.max + ')'))
-      .concat(['Total', 'Max (attempted)', 'Percentage', 'Exams attempted', 'Pending grading']);
+      .concat(exams.flatMap(examCols))
+      .concat(['Total', 'Max (attempted)', 'Percentage'])
+      .concat(allSec.flatMap(n => [n + ' total', n + ' max']))
+      .concat(['Exams attempted', 'Pending grading']);
     const aoa = [header];
     students.forEach(s => {
       let total = 0, max = 0, att = 0, pend = 0;
-      const cells = exams.map(e => {
+      const secTot = {}, secMx = {};
+      const cells = [];
+      exams.forEach(e => {
         const r = s.byTest[e.id];
-        if (!r) return 'AB';
+        const width = e.secNames.length ? e.secNames.length + 1 : 1;
+        if (!r) { for (let i = 0; i < width; i++) cells.push('AB'); return; }
         const m = maxTotalFor(r);
         total += (r.totalScore ?? 0); max += m; att++;
         if (!r.graded) pend++;
-        return r.totalScore ?? 0;
+        e.secNames.forEach(n => {
+          const x = (r.sectionScores || {})[n];
+          cells.push(x ? x.score : '');
+          if (x) { secTot[n] = (secTot[n] || 0) + x.score; secMx[n] = (secMx[n] || 0) + x.max; }
+        });
+        cells.push(r.totalScore ?? 0);
       });
-      aoa.push((withClassCol ? [s.className] : []).concat([s.roll, s.name]).concat(cells).concat([total, max, pct(total, max), att, pend]));
+      const secCols = allSec.flatMap(n => [secTot[n] ?? '', secMx[n] ?? '']);
+      aoa.push((withClassCol ? [s.className] : []).concat([s.roll, s.name], cells, [total, max, pct(total, max)], secCols, [att, pend]));
     });
     return { name: labelPrefix + ' ' + k, title: labelPrefix + ': ' + k + ' (' + students.length + ' students, ' + exams.length + ' exams; AB = absent / not attempted)', aoa };
   });
@@ -889,19 +933,24 @@ function buildIaWise(rows){ return buildMatrix(rows, r => infoFor(r).ia, 'IA', t
 function buildStudentWise(rows){
   const sorted = rows.slice().sort((a, b) =>
     natCompare(a.roll, b.roll) || natCompare(infoFor(a).ia, infoFor(b).ia) || natCompare(infoFor(a).title, infoFor(b).title));
-  const aoa = [['Roll', 'Name', 'Class', 'IA', 'Exam', 'MCQ score', 'Short-answer score', 'Total score', 'Max score', 'Percentage', 'Flags', 'Submitted at', 'Time taken', 'Status']];
+  const names = sectionNamesIn(sorted);
+  const aoa = [['Roll', 'Name', 'Class', 'IA', 'Exam', 'MCQ score', 'Short-answer score'].concat(secHeaders(names), ['Total score', 'Max score', 'Percentage', 'Flags', 'Submitted at', 'Time taken', 'Status'])];
   const stu = {};
   sorted.forEach(r => {
     const info = infoFor(r);
     const max = maxTotalFor(r);
-    aoa.push([r.roll, r.name, info.className, info.ia, info.title, r.mcqScore ?? 0, saScoreFor(r), r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']);
+    aoa.push([r.roll, r.name, info.className, info.ia, info.title, r.mcqScore ?? 0, saScoreFor(r)].concat(secCells(r, names), [r.totalScore ?? 0, max, pct(r.totalScore ?? 0, max), r.flagCount ?? 0, formatSubmittedAt(r.submittedAt), formatTimeTaken(r), r.graded ? 'Graded' : 'Needs grading']));
     const k = rollKey(r.roll) + '||' + lc(info.className);
-    if (!stu[k]) stu[k] = { roll: r.roll, name: r.name, className: info.className, n: 0, total: 0, max: 0 };
+    if (!stu[k]) stu[k] = { roll: r.roll, name: r.name, className: info.className, n: 0, total: 0, max: 0, sec: {} };
     stu[k].n++; stu[k].total += (r.totalScore ?? 0); stu[k].max += max;
+    names.forEach(n => {
+      const x = (r.sectionScores || {})[n];
+      if (x) { const e = stu[k].sec[n] = stu[k].sec[n] || { score: 0, max: 0 }; e.score += x.score; e.max += x.max; }
+    });
   });
-  const sum = [['Roll', 'Name', 'Class', 'Exams attempted', 'Total score', 'Max score', 'Percentage']];
+  const sum = [['Roll', 'Name', 'Class', 'Exams attempted', 'Total score', 'Max score', 'Percentage'].concat(names.flatMap(n => [n + ' total', n + ' max']))];
   Object.values(stu).sort((a, b) => natCompare(a.className, b.className) || natCompare(a.roll, b.roll))
-    .forEach(s => sum.push([s.roll, s.name, s.className, s.n, s.total, s.max, pct(s.total, s.max)]));
+    .forEach(s => sum.push([s.roll, s.name, s.className, s.n, s.total, s.max, pct(s.total, s.max)].concat(names.flatMap(n => [s.sec[n] ? s.sec[n].score : '', s.sec[n] ? s.sec[n].max : '']))));
   return [
     { name: 'Student-wise', title: 'Student-wise: every exam for each student (' + sorted.length + ' results)', aoa },
     { name: 'Student summary', title: 'Student summary: totals across the exams shown', aoa: sum }
